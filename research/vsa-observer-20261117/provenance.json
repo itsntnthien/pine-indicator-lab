@@ -1,0 +1,65 @@
+{
+  "origin": "User supplied attachment 2026-11-17",
+  "original_sha256": "ab2c1b04ce2eb5c914356fa6b965ecb62b55460c868666f6fb202af9b533fa86",
+  "original_lines": 3555,
+  "core_original_line_ranges": [
+    [
+      4,
+      50
+    ],
+    [
+      224,
+      246
+    ],
+    [
+      253,
+      262
+    ],
+    [
+      296,
+      305
+    ],
+    [
+      589,
+      598
+    ],
+    [
+      603,
+      665
+    ],
+    [
+      700,
+      714
+    ],
+    [
+      792,
+      814
+    ],
+    [
+      841,
+      849
+    ],
+    [
+      901,
+      906
+    ],
+    [
+      958,
+      1004
+    ],
+    [
+      1094,
+      1099
+    ],
+    [
+      1167,
+      1704
+    ]
+  ],
+  "render_original_line_range": [
+    3150,
+    3327
+  ],
+  "license": "User-provided code; no license grant or external authorship assumed",
+  "removed": "Candidate scoring, entry/SL/TP, DCA, trade lifecycle simulation, BUY/SELL and qualified-cloud alerts; replaced dashboard/cloud presentation"
+}

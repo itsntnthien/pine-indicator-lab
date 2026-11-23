@@ -1,0 +1,61 @@
+{
+  "status": "DRAFT_NATIVE_RETEST_BLOCKED",
+  "production": "dist/vsa_observer/VSA_OBSERVER_V3.pine",
+  "sha256": "ac3e071c3dc378e982489dd4b1420469164dd660427bbc8de112e57cd4f27842",
+  "scope": "COMPLETE_PRESENTATION_LAYER_ADAPTATION_FROM_SIX_LUXALGO_SOURCES",
+  "attribution": "docs/VSA_OBSERVER_LUX_UI_SOURCES.json",
+  "source_catalog_scanned": 114,
+  "source_license_live_dom": {
+    "reference-fractal-source.txt": true,
+    "reference-ict-source.txt": true,
+    "reference-liquidity-source.txt": true,
+    "reference-ob-source.txt": true,
+    "reference-sweeps-source.txt": true
+  },
+  "calculation_preservation": {
+    "core_and_setup_byte_identical": true,
+    "closed_snapshot_calculations_identical": true,
+    "before_sha256": "35ab70fa676e453ab820ba0451018c87d61e0c0ef29e2672b6ed93c3883c4a2f",
+    "after_sha256": "ac3e071c3dc378e982489dd4b1420469164dd660427bbc8de112e57cd4f27842"
+  },
+  "unit_tests": {
+    "count": 27,
+    "status": "PASS",
+    "evidence": "unit-tests.txt"
+  },
+  "native_intermediate": {
+    "sha256": "ef5bf24093094caa0430ea61d7e4477e2130aef723cf492b97e844df95a973da",
+    "symbol": "OANDA:XAUUSD",
+    "tf": "5",
+    "status": "PASS",
+    "source_copied_from_editor_matched": true,
+    "evidence": "native-initial-xau5.txt",
+    "includes": "512 setup masks, 34 lifecycle assertions, structure Present geometry/bounds, zone midpoints, sweep box/wick geometry"
+  },
+  "changes_after_native_run": [
+    "dashboard default moved to middle_left to avoid price-label overlap in narrow viewport",
+    "hide swing names while liquidity names enabled; anchor names at source"
+  ],
+  "final_native_compile": "NOT_RUN",
+  "final_visual_acceptance": "NOT_RUN",
+  "pending": [
+    "compile current production hash without harness",
+    "repeat symbol/timeframe matrix",
+    "Historical / Monochrome / layer toggles / max count",
+    "final screenshot at narrow and wide viewport",
+    "recover temporary browser session draft/clipboard/favorites toolbar/Autosave"
+  ],
+  "interruption": "In-app browser tool removed during run. Desktop fallback encountered direct user input; no further input sent. No fabricated native PASS for current hash.",
+  "session": {
+    "in_app_test_tab": "9 (tool-local id)",
+    "autosave_original": true,
+    "autosave_disabled_for_test": true,
+    "restoration": "UNVERIFIED_AFTER_BROWSER_TOOL_DISCONNECTED",
+    "original_layout_evidence": "original-layout.txt",
+    "original_editor_evidence": "original-draft.pine (2-character blank captured after editor load)",
+    "desktop_fallback": "One new temporary tab opened; close action rejected because direct user input detected. No source pasted/compiled or original chart modified via desktop fallback.",
+    "published": false,
+    "explicit_layout_save": false
+  },
+  "evidence_directory": "output/playwright/vsa-v3-lux-system"
+}

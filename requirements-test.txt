@@ -1,0 +1,2 @@
+# Time-zone database for the VSA research checks on Windows.
+tzdata==2026.2

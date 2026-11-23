@@ -1,0 +1,17 @@
+{
+  "src/vsa_observer/config.pine": "9181ee4ddc68d7be90936462e1a6e749cb19ed1c67d5dd49c2c45e6e4f5cfd08",
+  "src/vsa_observer/core.pine": "f0a84804bf36a6482e6f689a1c70fcce4d76002a2ce84c8f7cddd05644186fc0",
+  "src/vsa_observer/reference.py": "513fa1e357a43ee892bdfeebee7e632a9f2fee6452eeeefa2452aa6b0005cb96",
+  "src/vsa_observer/render.pine": "3da41f93375384aecc670333edccf87893f47c50477611553f0fdf971fdfaf5c",
+  "src/vsa_observer/setup.pine": "7add068c33b6554c069e6285a92dfaba8431e5c7eae8b3b355acf798bfbbe0cd",
+  "src/vsa_observer/ui.pine": "28b2c93335906f2346b323b261aa717aa60d5653c68ba1e8f05906c52adb2df5",
+  "dist/vsa_observer/XAU_VSA_OBSERVER.pine": "78b389c46aba4164437605c5f8230c460062ebff76eb6f8ea98455203555a316",
+  "dist/vsa_observer/XAU_VSA_OBSERVER.build.json": "34ab8515961ac99e2908c2ccf9ad9ffafadfaaf4fa7d2c8fa493b80e503722e6",
+  "tools/build_vsa_observer.py": "c2e512c335cfce7c0938b6f1ea41803265ba319d28732ad8047187f48ced0224",
+  "tools/build_vsa_v2_parity.py": "0dc986fe47dc5810389d173e2270fb65423330fa1255de0821aad3a822e7b81d",
+  "tests/test_vsa_observer.py": "59f946aaf4f21197d513206a2c12d912770dc0a166b0cacaf6c222019f3e10a3",
+  "tests/test_vsa_v2.py": "97e90c86cdda43ba27d7208e41865f00f822a6b9b8cc8df405364510b761f465",
+  "tests/vsa_observer_native.pine": "e5dac4e5e83ad9a9cf3cb8cb121fe92e6f1700bdc4c5824991a4a166070d648d",
+  "tests/vsa_observer_practical_audit.pine": "cc27e6239e185b2000ba915c01d55697850ea587307c13d08cf4fcee3413a141",
+  "tests/vsa_observer_setup_native.pine": "69774f26daa6e66737989ffc71957b5bad1fc6a45f30efa41da706255ea941c0"
+}

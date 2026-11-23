@@ -1,0 +1,83 @@
+{
+  "copyright": "LuxAlgo; Observer modifications 2026-11-19",
+  "license": "CC BY-NC-SA 4.0",
+  "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+  "scope": "Presentation adaptations only; original Observer calculations preserved",
+  "dependencies": "No external Pine imports or runtime dependencies",
+  "sources": [
+    {
+      "name": "Liquidity Sweeps [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/JRqryeJ5-Liquidity-Sweeps-LuxAlgo/",
+      "pinned_version": "1",
+      "sha256": "18be09f34ebf371e4cc8997ba77c29cc1ada4612a5529a79994694ec9b6ba12d",
+      "local_source": "research/luxalgo-smc-ict-20261114/sources/JRqryeJ5-Liquidity-Sweeps-LuxAlgo/source.pine",
+      "adapted_ui": [
+        "Sweep wick vertical width3 marker and translucent rejection rectangle"
+      ],
+      "license": "CC-BY-NC-SA-4.0"
+    },
+    {
+      "name": "Market Structure CHoCH/BOS (Fractal) [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/ZpHqSrBK-Market-Structure-CHoCH-BOS-Fractal-LuxAlgo/",
+      "pinned_version": "1",
+      "sha256": "85b762d87844f56a8075754ab5b0031cd5e8a28d3c280eec6c080dd499015b96",
+      "local_source": "research/luxalgo-smc-ict-20261114/sources/ZpHqSrBK-Market-Structure-CHoCH-BOS-Fractal-LuxAlgo/source.pine",
+      "adapted_ui": [
+        "Dashboard palette #1e222d, #373a46, border/frame width 1",
+        "Merged table heading, bullish/bearish columns, sizes"
+      ],
+      "license": "CC-BY-NC-SA-4.0"
+    },
+    {
+      "name": "Buyside & Sellside Liquidity [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/Qk4vBbfL-Buyside-Sellside-Liquidity-LuxAlgo/",
+      "pinned_version": "1",
+      "sha256": "3ebf0fea7af837ab85c2e53ac2ecb9750665f36b23f27cb2ed17b37cf158daa4",
+      "local_source": "research/luxalgo-smc-ict-20261114/sources/Qk4vBbfL-Buyside-Sellside-Liquidity-LuxAlgo/source.pine",
+      "adapted_ui": [
+        "Buyside/Sellside liquidity level text",
+        "Present/Historical display setting"
+      ],
+      "license": "CC-BY-NC-SA-4.0"
+    },
+    {
+      "name": "ICT Concepts [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/ib4uqBJx-ICT-Concepts-LuxAlgo/",
+      "pinned_version": "1",
+      "sha256": "a000fe76c60e89d6b782b2d67aeae426ad373379033ec259fa908dffba6bd452",
+      "local_source": "research/luxalgo-smc-ict-20261114/sources/ib4uqBJx-ICT-Concepts-LuxAlgo/source.pine",
+      "adapted_ui": [
+        "Market Structure / Liquidity / Order Blocks / Fair Value Gaps settings groups",
+        "FVG +/- labels and bullish/bearish zone colors"
+      ],
+      "license": "CC-BY-NC-SA-4.0"
+    },
+    {
+      "name": "Order Block Detector [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/KvGhxGxY-Order-Block-Detector-LuxAlgo/",
+      "pinned_version": "2",
+      "sha256": "5944612de739bfe9a6cc341eaa86cac28142f4f550ee7dee9014fbfa448b84a2",
+      "local_source": "research/luxalgo-smc-ict-20261114/sources/KvGhxGxY-Order-Block-Detector-LuxAlgo/source.pine",
+      "adapted_ui": [
+        "Zone boxes extend right, border opacity70",
+        "Separate dashed geometric midpoint line"
+      ],
+      "license": "CC-BY-NC-SA-4.0"
+    },
+    {
+      "name": "Smart Money Concepts (SMC) [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/CnB3fSph-Smart-Money-Concepts-SMC-LuxAlgo/",
+      "pinned_version": "7",
+      "sha256": "880717919e24049e19271cc41ba408b93d4dd4e556034b6d837084593db6275a",
+      "local_source": "research/luxalgo-smc-ict-20261114/sources/CnB3fSph-Smart-Money-Concepts-SMC-LuxAlgo/source.pine",
+      "adapted_ui": [
+        "Structure labels transparent; midpoint labels and horizontal swing segments",
+        "Colored/Monochrome palette and grouped inline settings",
+        "Bullish/bearish OB colors"
+      ],
+      "license": "CC-BY-NC-SA-4.0"
+    }
+  ],
+  "coverage_inventory": "output/playwright/vsa-v3-lux-system/catalog-ui-inventory.json",
+  "excluded": "Additional algorithms/oscillators/profiles not present in Observer are not introduced by a UX task; not a copy of all 114 indicators or an official LuxAlgo product."
+}

@@ -1,0 +1,15 @@
+{
+  "sha256": "ac3e071c3dc378e982489dd4b1420469164dd660427bbc8de112e57cd4f27842",
+  "lines": 1046,
+  "inputs": {
+    "src/vsa_observer/config.pine": "8dcf885833d79576d23f1f6205c34fee1b6669e861d30c11c3670f6bfe05d7d5",
+    "src/vsa_observer/core.pine": "4c86032ef88bd124016e31c9ea5701a089e25188c8fa662ef05df8c55929540a",
+    "src/vsa_observer/setup.pine": "0592e0989be5f15408797ea43f36fbc79ae2872c7408d2e8556c06ddeb8dd700",
+    "src/vsa_observer/ui.pine": "0478f3368ac3d28f077e8170a7711ac715e8b5238aa17243067b1f6476ac7fdc",
+    "src/vsa_observer/render.pine": "e5b79f6d4db206862c1f7d4c260eeb850b0c61d57909f1291021f4d68bc4a64f"
+  },
+  "provenance": "research/vsa-observer-20261117/provenance.json",
+  "mode": "OBSERVATION_ONLY",
+  "ui_attribution": "docs/VSA_OBSERVER_LUX_UI_SOURCES.json",
+  "validation": "evidence/vsa_observer/v3-lux-system-acceptance.json"
+}

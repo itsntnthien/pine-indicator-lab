@@ -1,0 +1,92 @@
+//@version=6
+indicator("SMC ICT Observer • XAU / NAS", "SMC ICT Observer", overlay = true, max_boxes_count = 100, max_labels_count = 120, max_lines_count = 120, max_bars_back = 500)
+// Research derivative, 2026-11-15. Not an official LuxAlgo product.
+// Portions adapted from © LuxAlgo: SMC, Pure Price Action Structures, Liquidity Sweeps,
+// Fair Value Gap, Inversion FVG, Order Blocks & Breaker Blocks, ICT Concepts.
+// CC BY-NC-SA 4.0: https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Changes: confirmed-bar state, causal availability, bounded storage, single inversion,
+// explicit INIT, DST-aware sessions and deterministic observation-only assessment.
+// Full source IDs, versions and hashes: docs/LUX_CUSTOM_ATTRIBUTION.json.
+
+string lxGroup = "Lớp quan sát"
+bool showZones = input.bool(true, "Vùng HTF", group = lxGroup)
+bool showPanel = input.bool(true, "Bảng nhận định", group = lxGroup)
+int visibleGroups = input.int(8, "Số vùng HTF gần giá", minval = 2, maxval = 16, group = lxGroup)
+bool lxShowStructure = input.bool(true, "BOS / CHoCH / sweep / EQH-EQL", group = lxGroup)
+bool lxShowRegions = input.bool(true, "OB / breaker / FVG / IFVG khung chart", group = lxGroup)
+bool lxShowRange = input.bool(true, "Premium / Discount từ swing đã xác nhận", group = lxGroup)
+bool lxShowPrevious = input.bool(false, "High / Low ngày và tuần trước", group = lxGroup)
+bool lxShowSessions = input.bool(false, "Tô nền giờ phiên địa phương", group = lxGroup)
+bool lxContextAlerts = input.bool(false, "Thông báo thay đổi bối cảnh", group = lxGroup)
+int LX_INTERNAL = 2
+int LX_SWING = 5
+int LX_TTL = 200
+int LX_REGION_LIMIT = 64
+int ATR_LENGTH = 14
+int MAX_AGE = 100
+float SR_ATR = 0.2
+float FVG_ATR = 0.1
+float tick = syminfo.mintick
+bool standardChart = chart.is_standard
+string activeTf = timeframe.in_seconds() <= 300 ? "60" : "240"
+
+type Zone
+    string id
+    string kind
+    int side
+    float lo
+    float hi
+    int anchor
+    int available
+    int bornIndex
+
+f_price(float value) =>
+    na(value) ? "Chưa đủ dữ liệu" : str.tostring(value, format.mintick)
+
+f_direction(int value) =>
+    value == 1 ? "TĂNG" : value == -1 ? "GIẢM" : "CHƯA RÕ"
+
+type LxStructure
+    float hi = na
+    float lo = na
+    int hiTime = na
+    int loTime = na
+    int hiIndex = na
+    int loIndex = na
+    bool hiBroken = false
+    bool loBroken = false
+    int bias = 0
+
+type LxPool
+    float level
+    int side
+    int anchor
+    int born
+    bool equalLevel
+
+type LxRegion
+    string id
+    string kind
+    int side
+    float lo
+    float hi
+    int anchor
+    int born
+    int available
+    int stage = 0
+
+var array<label> lxLabels = array.new<label>()
+var array<line> lxLines = array.new<line>()
+
+f_lxLabel(int side, float price, string caption, string detail) =>
+    if lxShowStructure
+        array.push(lxLabels, label.new(time, price, caption, xloc = xloc.bar_time, style = side == 1 ? label.style_label_up : label.style_label_down, color = color.new(side == 1 ? color.teal : color.orange, 80), textcolor = side == 1 ? color.teal : color.orange, size = size.tiny, tooltip = detail))
+    0
+
+f_lxBreak(int side, int eventType, float level, int anchor, string layer) =>
+    if side != 0
+        string caption = layer + " " + (eventType == 1 ? "INIT" : eventType == 2 ? "BOS" : "CHoCH")
+        f_lxLabel(side, level, caption, "Chốt: " + str.format_time(time_close, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN; pivot gốc: " + str.format_time(anchor, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + "; chỉ quan sát")
+        if lxShowStructure
+            array.push(lxLines, line.new(anchor, level, time, level, xloc = xloc.bar_time, color = color.new(side == 1 ? color.teal : color.orange, layer == "i" ? 60 : 20), style = layer == "i" ? line.style_dotted : line.style_solid))
+    0

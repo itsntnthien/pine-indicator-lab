@@ -1,0 +1,79 @@
+// Append after the existing VSA native harness; never ship in the indicator.
+f_e2_assert(bool condition, string message) =>
+    if not condition
+        runtime.error("SETUP TEST: " + message)
+if barstate.isfirst
+    for sideIndex = 0 to 3
+        int sweep = array.get(array.from(1, -1, 2, 0), sideIndex)
+        for vsa in array.from(-1, 1)
+            bool expectedAbove = sideIndex == 0 ? false : sideIndex == 3 ? vsa < 0 : true
+            f_e2_assert(f_obs_label_above(sweep, vsa) == expectedAbove, "sweep label side must override VSA")
+    for ageIndex = 0 to 3
+        int age = ageIndex == 0 ? -1 : ageIndex == 1 ? 0 : ageIndex == 2 ? 10 : 11
+        for bits = 0 to 127
+            bool invalid = bits % 2 == 1
+            bool opposite = int(bits / 2) % 2 == 1
+            bool structure = int(bits / 4) % 2 == 1
+            bool htf = int(bits / 8) % 2 == 1
+            bool vsa = int(bits / 16) % 2 == 1
+            bool extended = int(bits / 32) % 2 == 1
+            bool dataReady = int(bits / 64) % 2 == 1
+            int mask = f_setup_mask(age, invalid, opposite, structure, htf, vsa, extended, dataReady)
+            bool eligible = age >= 0 and age <= 10 and not invalid and not opposite and structure and htf and vsa and not extended and dataReady
+            f_e2_assert((mask == 0) == eligible, "eligibility truth table")
+            f_e2_assert(f_setup_has(mask, 4) == (age == 11), "age 10/11 boundary")
+            f_e2_assert(f_setup_has(mask, 8) == invalid and f_setup_has(mask, 16) == opposite, "invalidation/conflict flags")
+            f_e2_assert((f_setup_status(mask) == "ĐỦ TIÊU CHÍ") == eligible, "status and arithmetic disagree")
+            f_e2_assert(str.length(f_setup_reason(mask)) > 0 and str.length(f_setup_reasons(mask)) > 0, "empty explanation")
+    for side in array.from(-1, 1)
+        SweepRecord record = SweepRecord.new()
+        f_e2_assert(record.age(100) == -1, "unseen sweep")
+        record.update(side, 100, side == 1 ? 98 : 102, 100, 1000, 100)
+        f_e2_assert(record.age(100) == 0 and not record.invalid, "new sweep")
+        record.update(side, na, na, 101, 1010, side == 1 ? 98 : 102)
+        f_e2_assert(not record.invalid, "equality must not invalidate")
+        record.update(side, na, na, 102, 1020, side == 1 ? 97.99 : 102.01)
+        f_e2_assert(record.invalid, "strict extreme breach")
+        record.update(side, na, na, 103, 1030, 100)
+        f_e2_assert(record.invalid, "invalid must remain latched on recovery")
+        record.update(side, 101, side == 1 ? 99 : 103, 104, 1040, 101)
+        f_e2_assert(not record.invalid and record.age(104) == 0 and record.level == 101, "new sweep resets lifecycle")
+        f_e2_assert(not f_setup_structure(side, side, side, 999, 1000), "BOS before sweep")
+        f_e2_assert(f_setup_structure(side, side, side, 1000, 1000), "same-bar BOS allowed")
+        f_e2_assert(f_setup_structure(side, side, side * 2, 1001, 1000), "CHoCH after sweep")
+        f_e2_assert(not f_setup_structure(side, -side, -side, 1001, 1000), "opposite structure")
+        f_e2_assert(not f_setup_structure(side, side, side, 1001, na), "no sweep time")
+var int e2ReadyLong = 0
+var int e2ReadyShort = 0
+var int e2BothSweeps = 0
+int e2LowBar = obsLowSweep.bar
+int e2HighBar = obsHighSweep.bar
+bool e2LowInvalid = obsLowSweep.invalid
+bool e2HighInvalid = obsHighSweep.invalid
+int e2LowAge = obsLowSweep.age(smcCanonicalBarIndex)
+int e2HighAge = obsHighSweep.age(smcCanonicalBarIndex)
+if barstate.isconfirmed and smcCalculationTf
+    f_e2_assert(obsLongMask != 0 or (e2LowAge >= 0 and e2LowAge <= 10 and not e2LowInvalid and obsLongStructure and obsContextReady and obsConfDirection == 1 and obsAnchorDirection == 1 and obsVsa > 0 and obsVsa != 99 and math.abs(obsDistance) <= 2.5), "false eligible long")
+    f_e2_assert(obsShortMask != 0 or (e2HighAge >= 0 and e2HighAge <= 10 and not e2HighInvalid and obsShortStructure and obsContextReady and obsConfDirection == -1 and obsAnchorDirection == -1 and obsVsa < 0 and math.abs(obsDistance) <= 2.5), "false eligible short")
+    f_e2_assert(obsLongMask != 0 or obsShortMask != 0, "both directions eligible")
+    if not na(smcSweptLowLevel)
+        f_e2_assert(e2LowAge == 0 and obsLowSweep.level == smcSweptLowLevel and obsLowSweep.extreme == low, "low event capture")
+    if not na(smcSweptHighLevel)
+        f_e2_assert(e2HighAge == 0 and obsHighSweep.level == smcSweptHighLevel and obsHighSweep.extreme == high, "high event capture")
+    if e2LowBar == e2LowBar[1] and e2LowInvalid[1]
+        f_e2_assert(e2LowInvalid, "long invalid resurrected")
+    if e2HighBar == e2HighBar[1] and e2HighInvalid[1]
+        f_e2_assert(e2HighInvalid, "short invalid resurrected")
+    if e2LowAge >= 0 and e2LowAge <= 10 and not e2LowInvalid and e2HighAge >= 0 and e2HighAge <= 10 and not e2HighInvalid
+        e2BothSweeps += 1
+        f_e2_assert(f_setup_has(obsLongMask, 16) and f_setup_has(obsShortMask, 16), "two-sided sweep not blocked")
+    e2ReadyLong += obsLongMask == 0 ? 1 : 0
+    e2ReadyShort += obsShortMask == 0 ? 1 : 0
+    if vwValid
+        f_e2_assert(math.abs(obsRv - volume / vwVolumeMean) < 0.000001, "relative volume display")
+    if last_bar_index - bar_index <= 3
+        log.info("SETUP_SNAPSHOT|" + str.tostring(time_close) + "|" + str.tostring(obsLongMask) + "|" + str.tostring(obsShortMask) + "|" + str.tostring(obsLowSweep.level) + "|" + str.tostring(obsHighSweep.level) + "|" + str.tostring(obsDistance, "#.######"))
+if barstate.isrealtime and not barstate.isconfirmed and not na(obsTime[1])
+    f_e2_assert(obsTime == obsTime[1] and obsLongMask == obsLongMask[1] and obsShortMask == obsShortMask[1] and ((na(obsRv) and na(obsRv[1])) or obsRv == obsRv[1]), "intrabar snapshot moved")
+if barstate.islastconfirmedhistory
+    log.info("SETUP_E2E_PASS|" + syminfo.tickerid + "|" + timeframe.period + "|standard=" + str.tostring(chart.is_standard) + "|bars=" + str.tostring(witnessBars) + "|grid=512|lifecycle=22|labelCases=8|ready=" + str.tostring(e2ReadyLong) + "/" + str.tostring(e2ReadyShort) + "|conflicts=" + str.tostring(e2BothSweeps))

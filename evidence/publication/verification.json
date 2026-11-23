@@ -1,0 +1,118 @@
+{
+  "date": "2026-11-23",
+  "platform": "Windows",
+  "python": "3.13.14",
+  "scope": "Pine indicators only",
+  "checks": [
+    {
+      "command": "python -B tools/build_intraday.py",
+      "exit_code": 0,
+      "seconds": 0.062
+    },
+    {
+      "command": "python -B tools/build_lux_custom.py",
+      "exit_code": 0,
+      "seconds": 0.075
+    },
+    {
+      "command": "python -B tools/build_vsa_observer.py",
+      "exit_code": 0,
+      "seconds": 0.062
+    },
+    {
+      "command": "python -B -m unittest discover -s tests -q",
+      "exit_code": 0,
+      "seconds": 0.609,
+      "tests": 86
+    },
+    {
+      "command": "python -B tools/check_vsa_v3_mutations.py",
+      "exit_code": 0,
+      "seconds": 0.113,
+      "rejected_mutations": 5
+    }
+  ],
+  "unchanged_source_files": [
+    {
+      "path": "src/intraday/config.pine",
+      "sha256": "6be27ff43327589d165964d9e99581174bfd24c699f24d7f5d5a0c6256414a19"
+    },
+    {
+      "path": "src/intraday/context.pine",
+      "sha256": "e9650baa09b2b0a267609cc89d32e656fc9b8fd6d5811a215ddf39109296e01d"
+    },
+    {
+      "path": "src/intraday/reference.py",
+      "sha256": "541bbc15d7c7a0a79b3b589df82903fa1feb087d2718ad8fc51f84840bba464e"
+    },
+    {
+      "path": "src/intraday/setup.pine",
+      "sha256": "ec16c7979f996e3e7e260bde07798a0eb7f08150bec1dd54b093226c7802b5d6"
+    },
+    {
+      "path": "src/intraday/ui.pine",
+      "sha256": "566dcb2281676262e306de0cb1d9ca2014a8c147c01371f06239bd5617d34fdd"
+    },
+    {
+      "path": "src/intraday/zones.pine",
+      "sha256": "5400aa3e3d266d7bacbf67adacd2fd4100ed547d69abef6400ae5efb17a7469f"
+    },
+    {
+      "path": "src/lux_custom/assessment.pine",
+      "sha256": "13283493da4bd3fa45bbb303110356c9e74c1f1924275d8d526e7892008cddc3"
+    },
+    {
+      "path": "src/lux_custom/config.pine",
+      "sha256": "c98ce8dba450fbab27457dfcab385d4db2ff4ad4dc0f459b1e7fb009cdf6394e"
+    },
+    {
+      "path": "src/lux_custom/reference.py",
+      "sha256": "a2d61b0bef0145074d2eedfb4e87d9d740cc2934c17c4e613104ebd1fed25896"
+    },
+    {
+      "path": "src/lux_custom/regions.pine",
+      "sha256": "3f91a90019d2627e51c348823d4fb942ca90760d80907e847f3134c02d307208"
+    },
+    {
+      "path": "src/lux_custom/structure.pine",
+      "sha256": "32d16d7fc9558f7ce39c302535933cb879e3779a16a7e7b629fb76e5e47748f5"
+    },
+    {
+      "path": "src/lux_custom/ui.pine",
+      "sha256": "c1e346ea39253643f4f063ed7cba7298a1dbabe8bf1280b46a62032d48faa8fa"
+    },
+    {
+      "path": "src/vsa_observer/config.pine",
+      "sha256": "8dcf885833d79576d23f1f6205c34fee1b6669e861d30c11c3670f6bfe05d7d5"
+    },
+    {
+      "path": "src/vsa_observer/core.pine",
+      "sha256": "4c86032ef88bd124016e31c9ea5701a089e25188c8fa662ef05df8c55929540a"
+    },
+    {
+      "path": "src/vsa_observer/reference.py",
+      "sha256": "af9f5fdc2ef1de14af1bc286ea31608d7e5db21362d5e5ade61a55b7f5c6e535"
+    },
+    {
+      "path": "src/vsa_observer/render.pine",
+      "sha256": "e5b79f6d4db206862c1f7d4c260eeb850b0c61d57909f1291021f4d68bc4a64f"
+    },
+    {
+      "path": "src/vsa_observer/setup.pine",
+      "sha256": "0592e0989be5f15408797ea43f36fbc79ae2872c7408d2e8556c06ddeb8dd700"
+    },
+    {
+      "path": "src/vsa_observer/ui.pine",
+      "sha256": "0478f3368ac3d28f077e8170a7711ac715e8b5238aa17243067b1f6476ac7fdc"
+    }
+  ],
+  "native_compile_this_run": "NOT_RUN",
+  "native_realtime_this_run": "NOT_RUN",
+  "profitability": "NOT_EVALUATED",
+  "publication_guard": {
+    "status": "PASS",
+    "tracked_files": 114,
+    "pine_manifests": 3,
+    "scope": "Pine indicators and directly related tooling only"
+  }
+}

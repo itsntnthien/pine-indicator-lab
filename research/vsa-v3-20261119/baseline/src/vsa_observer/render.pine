@@ -1,0 +1,178 @@
+f_smc_select_liquidity(array<Liquidity> zones, float price, float atr, int limit, bool activeOnly) =>
+    array<int> selected = array.new_int(0)
+    if limit > 0 and array.size(zones) > 0
+        for rank = 0 to limit - 1
+            bool found = false
+            int bestId = na
+            int bestCreated = na
+            int bestInactive = na
+            float bestDistance = na
+            for index = 0 to array.size(zones) - 1
+                Liquidity item = array.get(zones, index)
+                bool eligible = not item.terminal and (not activeOnly or not item.swept) and not array.includes(selected, item.creation_sequence_id)
+                if eligible
+                    float itemPrice = f_ticks_to_price(item.level_ticks, syminfo.mintick)
+                    float itemDistance = not na(price) ? math.abs(itemPrice - price) : 0.0
+                    itemDistance := not na(atr) and atr > 0 ? itemDistance / atr : itemDistance
+                    int itemInactive = item.swept ? 1 : 0
+                    bool better = not found
+                    if not better and itemInactive < bestInactive
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance < bestDistance
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index > bestCreated
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index == bestCreated and item.creation_sequence_id < bestId
+                        better := true
+                    if better
+                        found := true
+                        bestId := item.creation_sequence_id
+                        bestCreated := item.creation_bar_index
+                        bestInactive := itemInactive
+                        bestDistance := itemDistance
+            if found
+                array.push(selected, bestId)
+    selected
+
+f_smc_select_fvgs(array<FVG> zones, float price, float atr, int limit, bool activeOnly) =>
+    array<int> selected = array.new_int(0)
+    if limit > 0 and array.size(zones) > 0
+        for rank = 0 to limit - 1
+            bool found = false
+            int bestId = na
+            int bestCreated = na
+            int bestInactive = na
+            float bestDistance = na
+            for index = 0 to array.size(zones) - 1
+                FVG item = array.get(zones, index)
+                bool eligible = not item.terminal and (not activeOnly or not item.mitigated) and not array.includes(selected, item.creation_sequence_id)
+                if eligible
+                    float itemLow = f_ticks_to_price(item.bottom_ticks, syminfo.mintick)
+                    float itemHigh = f_ticks_to_price(item.top_ticks, syminfo.mintick)
+                    float itemDistance = not na(price) ? math.max(itemLow - price, math.max(price - itemHigh, 0.0)) : 0.0
+                    itemDistance := not na(atr) and atr > 0 ? itemDistance / atr : itemDistance
+                    int itemInactive = item.mitigated ? 1 : 0
+                    bool better = not found
+                    if not better and itemInactive < bestInactive
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance < bestDistance
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index > bestCreated
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index == bestCreated and item.creation_sequence_id < bestId
+                        better := true
+                    if better
+                        found := true
+                        bestId := item.creation_sequence_id
+                        bestCreated := item.creation_bar_index
+                        bestInactive := itemInactive
+                        bestDistance := itemDistance
+            if found
+                array.push(selected, bestId)
+    selected
+
+f_smc_select_obs(array<OrderBlock> zones, float price, float atr, int limit, bool activeOnly) =>
+    array<int> selected = array.new_int(0)
+    if limit > 0 and array.size(zones) > 0
+        for rank = 0 to limit - 1
+            bool found = false
+            int bestId = na
+            int bestCreated = na
+            int bestInactive = na
+            float bestDistance = na
+            for index = 0 to array.size(zones) - 1
+                OrderBlock item = array.get(zones, index)
+                bool eligible = not item.terminal and (not activeOnly or not item.mitigated) and not array.includes(selected, item.creation_sequence_id)
+                if eligible
+                    float itemLow = f_ticks_to_price(item.bottom_ticks, syminfo.mintick)
+                    float itemHigh = f_ticks_to_price(item.top_ticks, syminfo.mintick)
+                    float itemDistance = not na(price) ? math.max(itemLow - price, math.max(price - itemHigh, 0.0)) : 0.0
+                    itemDistance := not na(atr) and atr > 0 ? itemDistance / atr : itemDistance
+                    int itemInactive = item.mitigated ? 1 : 0
+                    bool better = not found
+                    if not better and itemInactive < bestInactive
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance < bestDistance
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index > bestCreated
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index == bestCreated and item.creation_sequence_id < bestId
+                        better := true
+                    if better
+                        found := true
+                        bestId := item.creation_sequence_id
+                        bestCreated := item.creation_bar_index
+                        bestInactive := itemInactive
+                        bestDistance := itemDistance
+            if found
+                array.push(selected, bestId)
+    selected
+
+f_render_smc_objects(array<line> smcStructureRenderLines, array<line> smcLiquidityRenderLines, array<box> smcFvgRenderBoxes, array<box> smcObRenderBoxes, label priorStructureLabel, C16C02Snapshot c16c02Snapshot, StructuralEvent smcLatestStructure, array<Liquidity> smcLiquidity, array<FVG> smcFvgs, array<OrderBlock> smcObs, int smcCanonicalBarIndex, int inducementTicks, int inducementTime, int inducementSide, float smcRenderPrice, float smcRenderAtr, int liquidityLimit, int fvgLimit, int obLimit, bool showMarketStructure, bool showLiquidity, bool showFvg, bool showOrderBlocks, bool showInducement, bool showZoneQuality, bool showZoneLabels, bool showOnlyActiveZones) =>
+    array<int> selectedLiquidity = f_smc_select_liquidity(smcLiquidity, smcRenderPrice, smcRenderAtr, showLiquidity ? liquidityLimit : 0, showOnlyActiveZones)
+    array<int> selectedFvgs = f_smc_select_fvgs(smcFvgs, smcRenderPrice, smcRenderAtr, showFvg ? fvgLimit : 0, showOnlyActiveZones)
+    array<int> selectedObs = f_smc_select_obs(smcObs, smcRenderPrice, smcRenderAtr, showOrderBlocks ? obLimit : 0, showOnlyActiveZones)
+    while array.size(smcStructureRenderLines) > 0
+        line.delete(array.pop(smcStructureRenderLines))
+    while array.size(smcLiquidityRenderLines) > 0
+        line.delete(array.pop(smcLiquidityRenderLines))
+    while array.size(smcFvgRenderBoxes) > 0
+        box.delete(array.pop(smcFvgRenderBoxes))
+    while array.size(smcObRenderBoxes) > 0
+        box.delete(array.pop(smcObRenderBoxes))
+    label nextStructureLabel = priorStructureLabel
+    if not na(nextStructureLabel)
+        label.delete(nextStructureLabel)
+        nextStructureLabel := na
+    if showMarketStructure
+        if not na(c16c02Snapshot.swing_high_ticks) and not na(c16c02Snapshot.swing_high_source_time)
+            line smcSwingHighLine = line.new(c16c02Snapshot.swing_high_confirmation_time, f_ticks_to_price(c16c02Snapshot.swing_high_ticks, syminfo.mintick), time, f_ticks_to_price(c16c02Snapshot.swing_high_ticks, syminfo.mintick), xloc = xloc.bar_time, extend = extend.right, color = color.new(color.rgb(210, 55, 70), 18), style = line.style_dashed, width = 2)
+            array.push(smcStructureRenderLines, smcSwingHighLine)
+        if not na(c16c02Snapshot.swing_low_ticks) and not na(c16c02Snapshot.swing_low_source_time)
+            line smcSwingLowLine = line.new(c16c02Snapshot.swing_low_confirmation_time, f_ticks_to_price(c16c02Snapshot.swing_low_ticks, syminfo.mintick), time, f_ticks_to_price(c16c02Snapshot.swing_low_ticks, syminfo.mintick), xloc = xloc.bar_time, extend = extend.right, color = color.new(color.rgb(0, 145, 125), 18), style = line.style_dashed, width = 2)
+            array.push(smcStructureRenderLines, smcSwingLowLine)
+        if smcLatestStructure.event_type != SE_NONE and not na(smcLatestStructure.price_ticks) and not na(smcLatestStructure.time)
+            bool smcStructureBullish = smcLatestStructure.event_type == SE_BOS_BULLISH or smcLatestStructure.event_type == SE_CHOCH_BULLISH
+            string smcStructureText = smcLatestStructure.event_type == SE_BOS_BULLISH ? "BOS ↑" : smcLatestStructure.event_type == SE_BOS_BEARISH ? "BOS ↓" : smcLatestStructure.event_type == SE_CHOCH_BULLISH ? "CHoCH ↑" : "CHoCH ↓"
+            nextStructureLabel := label.new(smcLatestStructure.time, f_ticks_to_price(smcLatestStructure.price_ticks, syminfo.mintick) + (smcStructureBullish ? -1 : 1) * nz(smcRenderAtr) * 0.35, smcStructureText, xloc = xloc.bar_time, yloc = yloc.price, style = smcStructureBullish ? label.style_label_up : label.style_label_down, color = color.new(smcStructureBullish ? color.rgb(0, 145, 125) : color.rgb(210, 55, 70), 8), textcolor = color.white, size = size.tiny, tooltip = "Confirmed market-structure event\n" + smcStructureText + "\nLevel: " + f_c08_price_text(smcLatestStructure.price_ticks))
+        if showInducement and not na(inducementTicks) and not na(inducementTime)
+            bool inducementBullish = inducementSide == DIR_BULLISH
+            line smcInducementLine = line.new(inducementTime, f_ticks_to_price(inducementTicks, syminfo.mintick), time, f_ticks_to_price(inducementTicks, syminfo.mintick), xloc = xloc.bar_time, extend = extend.right, color = color.new(inducementBullish ? color.rgb(0, 145, 125) : color.rgb(210, 55, 70), 20), style = line.style_dotted, width = 1)
+            array.push(smcStructureRenderLines, smcInducementLine)
+    if showLiquidity and array.size(smcLiquidity) > 0
+        for smcRenderIndex = 0 to array.size(smcLiquidity) - 1
+            Liquidity smcLiquidityItem = array.get(smcLiquidity, smcRenderIndex)
+            if array.includes(selectedLiquidity, smcLiquidityItem.creation_sequence_id)
+                int smcLiquidityLeft = smcLiquidityItem.creation_time
+                bool smcLiquidityHighSide = smcLiquidityItem.side == DIR_BEARISH
+                color smcLiquidityColor = smcLiquidityHighSide ? color.rgb(225, 65, 75) : color.rgb(0, 165, 145)
+                line smcLiquidityLine = line.new(smcLiquidityLeft, f_ticks_to_price(smcLiquidityItem.level_ticks, syminfo.mintick), time, f_ticks_to_price(smcLiquidityItem.level_ticks, syminfo.mintick), xloc = xloc.bar_time, extend = extend.right, color = color.new(smcLiquidityColor, smcLiquidityItem.swept ? 62 : 5), style = smcLiquidityItem.swept ? line.style_dotted : line.style_solid, width = 1)
+                array.push(smcLiquidityRenderLines, smcLiquidityLine)
+    if showFvg and array.size(smcFvgs) > 0
+        for smcRenderIndex = 0 to array.size(smcFvgs) - 1
+            FVG smcFvgItem = array.get(smcFvgs, smcRenderIndex)
+            if array.includes(selectedFvgs, smcFvgItem.creation_sequence_id)
+                int smcFvgLeft = smcFvgItem.creation_time
+                color smcFvgBaseColor = smcFvgItem.side == DIR_BULLISH ? color.rgb(0, 160, 190) : color.rgb(230, 135, 20)
+                color smcFvgColor = color.new(smcFvgBaseColor, smcFvgItem.mitigated ? 95 : 89)
+                string smcFvgWidthText = showZoneQuality and not na(smcRenderAtr) and smcRenderAtr > 0 ? " / " + str.tostring((smcFvgItem.top_ticks - smcFvgItem.bottom_ticks) * syminfo.mintick / smcRenderAtr, "#.##") + " ATR" : ""
+                string smcFvgText = showZoneLabels ? (smcFvgItem.side == DIR_BULLISH ? "FVG ▲" : "FVG ▼") + (smcFvgItem.mitigated ? " · chạm" : "") + smcFvgWidthText : ""
+                box smcFvgBox = box.new(left = smcFvgLeft, top = f_ticks_to_price(smcFvgItem.top_ticks, syminfo.mintick), right = time, bottom = f_ticks_to_price(smcFvgItem.bottom_ticks, syminfo.mintick), xloc = xloc.bar_time, extend = extend.right, border_color = color.new(smcFvgBaseColor, smcFvgItem.mitigated ? 65 : 8), border_width = 1, bgcolor = smcFvgColor, text = smcFvgText, text_color = color.new(chart.fg_color, smcFvgItem.mitigated ? 35 : 0), text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_center)
+                array.push(smcFvgRenderBoxes, smcFvgBox)
+    if showOrderBlocks and array.size(smcObs) > 0
+        for smcRenderIndex = 0 to array.size(smcObs) - 1
+            OrderBlock smcObItem = array.get(smcObs, smcRenderIndex)
+            if array.includes(selectedObs, smcObItem.creation_sequence_id)
+                int smcObLeft = smcObItem.creation_time
+                color smcObBaseColor = smcObItem.side == DIR_BULLISH ? color.rgb(35, 125, 210) : color.rgb(185, 70, 155)
+                color smcObColor = color.new(smcObBaseColor, smcObItem.mitigated ? 95 : 90)
+                string smcObWidthText = showZoneQuality and not na(smcRenderAtr) and smcRenderAtr > 0 ? " / " + str.tostring((smcObItem.top_ticks - smcObItem.bottom_ticks) * syminfo.mintick / smcRenderAtr, "#.##") + " ATR" : ""
+                string smcObText = showZoneLabels ? (smcObItem.side == DIR_BULLISH ? "OB ▲" : "OB ▼") + (smcObItem.mitigated ? " · chạm" : "") + smcObWidthText : ""
+                box smcObBox = box.new(left = smcObLeft, top = f_ticks_to_price(smcObItem.top_ticks, syminfo.mintick), right = time, bottom = f_ticks_to_price(smcObItem.bottom_ticks, syminfo.mintick), xloc = xloc.bar_time, extend = extend.right, border_color = color.new(smcObBaseColor, smcObItem.mitigated ? 68 : 10), border_width = 1, bgcolor = smcObColor, text = smcObText, text_color = color.new(chart.fg_color, smcObItem.mitigated ? 35 : 0), text_size = size.tiny, text_halign = text.align_left, text_valign = text.align_center)
+                array.push(smcObRenderBoxes, smcObBox)
+    nextStructureLabel
+bool smcRendererRefresh = barstate.islast
+if smcRendererRefresh
+    bool smcShowObservation = false
+    smcStructureRenderLabel := f_render_smc_objects(smcStructureRenderLines, smcLiquidityRenderLines, smcFvgRenderBoxes, smcObRenderBoxes, smcStructureRenderLabel, c16c02Snapshot, smcLatestStructure, smcLiquidity, smcFvgs, smcObs, smcCanonicalBarIndex, smcLatestInducementTicks, smcLatestInducementTime, smcLatestInducementSide, committedPreviousClose, committedAtr, smcLiquidityDisplayLimit, smcFvgDisplayLimit, smcObDisplayLimit, showMarketStructure or smcShowObservation, showLiquidity or smcShowObservation, showFvg or smcShowObservation, showOrderBlocks or smcShowObservation, showInducement, showZoneQuality, showZoneLabels, showOnlyActiveZones)
+    smcLastRendererBar := bar_index

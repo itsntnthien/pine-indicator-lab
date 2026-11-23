@@ -1,0 +1,74 @@
+//@version=6
+indicator("ICT Intraday • XAU / NAS — thử nghiệm", "ICT EXP", overlay = true, max_boxes_count = 80, max_labels_count = 250, max_lines_count = 30, max_bars_back = 500)
+
+// Contract v1: interview 2026-11-13. Defaults are research settings, not optimized parameters.
+string viewGroup = "Hiển thị"
+bool showZones = input.bool(true, "Vùng HTF", group = viewGroup)
+bool showPanel = input.bool(true, "Bảng bối cảnh", group = viewGroup)
+int visibleGroups = input.int(12, "Số nhóm vùng gần giá", minval = 2, maxval = 24, group = viewGroup)
+bool sendAlerts = input.bool(true, "Cảnh báo vùng / xác nhận / open", group = "Cảnh báo")
+bool auditLogs = input.bool(false, "Log kiểm chứng (không phải kết quả giao dịch)", group = "Kiểm chứng")
+float rrWarning = input.float(1.5, "Cảnh báo RR gross dưới", minval = 0.1, step = 0.1, group = "Cảnh báo")
+int ATR_LENGTH = 14
+int MAX_AGE = 100
+int WAIT_BARS = 3
+float SR_ATR = 0.2
+float FVG_ATR = 0.1
+float STOP_ATR = 0.1
+float tick = syminfo.mintick
+bool knownFeed = syminfo.tickerid == "OANDA:XAUUSD" or syminfo.tickerid == "FOREXCOM:NAS100"
+bool standardChart = chart.is_standard
+bool entryChart = timeframe.isminutes and (timeframe.multiplier == 5 or timeframe.multiplier == 15)
+bool canSignal = knownFeed and standardChart and entryChart
+string activeTf = timeframe.isminutes and (timeframe.multiplier == 5 or timeframe.multiplier == 60) ? "60" : "240"
+
+type Zone
+    string id
+    string kind
+    int side
+    float lo
+    float hi
+    int anchor
+    int available
+    int bornIndex
+    bool used = false
+    int attemptBar = na
+    float extreme = na
+    bool blocked = false
+
+type Setup
+    string id
+    int side
+    int confirmedAt
+    int confirmBar
+    float referenceClose
+    float atr
+    float extreme
+    float stop
+    float target
+    string sources
+    string kinds
+
+type OpenObservation
+    string setupId
+    int at
+    float price
+    float rr
+    bool adverse
+
+f_price(float value) =>
+    na(value) ? "Chưa rõ" : str.tostring(value, format.mintick)
+
+f_direction(int value) =>
+    value == 1 ? "TĂNG" : value == -1 ? "GIẢM" : "CHƯA RÕ"
+
+f_rr(int side, float entry, float stop, float target) =>
+    float risk = side * (entry - stop)
+    float reward = side * (target - entry)
+    not na(target) and risk > 0 and reward > 0 ? reward / risk : na
+
+f_rrText(float rr) =>
+    na(rr) ? "TP/RR chưa xác định" : str.tostring(rr, "#.##") + "R gross" + (rr < rrWarning ? " • RR THẤP" : "")
+
+f_outward(float value, int side) =>
+    (side == 1 ? math.floor(value / tick + 1e-9) : math.ceil(value / tick - 1e-9)) * tick

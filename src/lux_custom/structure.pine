@@ -1,0 +1,90 @@
+// Adapted structure state / wick reclaim concepts from LuxAlgo; see attribution manifest.
+// Breaks use previously known pivots; new pivots become usable on the next bar.
+f_lxPivots(int length) =>
+    bool ph = not na(high[2 * length])
+    bool pl = ph
+    for k = 1 to length
+        ph := ph and high[length] > high[length + k] and high[length] >= high[length - k]
+        pl := pl and low[length] < low[length + k] and low[length] <= low[length - k]
+    [ph, pl]
+
+f_lxAdvance(LxStructure state, bool ph, bool pl, int length) =>
+    int side = 0
+    int eventType = 0
+    float level = na
+    int anchor = na
+    if barstate.isconfirmed and standardChart
+        bool up = not state.hiBroken and not na(state.hi) and close > state.hi
+        bool down = not state.loBroken and not na(state.lo) and close < state.lo
+        if up and down
+            state.bias := 0
+        else if up or down
+            side := up ? 1 : -1
+            eventType := state.bias == 0 ? 1 : state.bias == side ? 2 : 3
+            level := up ? state.hi : state.lo
+            anchor := up ? state.hiTime : state.loTime
+            state.bias := side
+        if up
+            state.hiBroken := true
+        if down
+            state.loBroken := true
+        if ph
+            state.hi := high[length]
+            state.hiTime := time[length]
+            state.hiIndex := bar_index - length
+            state.hiBroken := false
+        if pl
+            state.lo := low[length]
+            state.loTime := time[length]
+            state.loIndex := bar_index - length
+            state.loBroken := false
+    [side, eventType, level, anchor]
+
+var LxStructure lxInternal = LxStructure.new()
+var LxStructure lxSwing = LxStructure.new()
+var array<LxPool> lxPools = array.new<LxPool>()
+[lxInternalPh, lxInternalPl] = f_lxPivots(LX_INTERNAL)
+[lxSwingPh, lxSwingPl] = f_lxPivots(LX_SWING)
+[lxInternalBreak, lxInternalType, lxInternalLevel, lxInternalAnchor] = f_lxAdvance(lxInternal, lxInternalPh, lxInternalPl, LX_INTERNAL)
+[lxSwingBreak, lxSwingType, lxSwingLevel, lxSwingAnchor] = f_lxAdvance(lxSwing, lxSwingPh, lxSwingPl, LX_SWING)
+f_lxBreak(lxInternalBreak, lxInternalType, lxInternalLevel, lxInternalAnchor, "i")
+f_lxBreak(lxSwingBreak, lxSwingType, lxSwingLevel, lxSwingAnchor, "s")
+
+int lxSweepMask = 0
+int lxEqualMask = 0
+if barstate.isconfirmed and standardChart
+    int i = array.size(lxPools) - 1
+    while i >= 0
+        LxPool pool = array.get(lxPools, i)
+        bool expired = bar_index - pool.born >= LX_TTL
+        bool crossed = pool.side == 1 ? close < pool.level : close > pool.level
+        bool swept = pool.side == 1 ? low <= pool.level - tick and close >= pool.level + tick : high >= pool.level + tick and close <= pool.level - tick
+        if not expired and swept
+            lxSweepMask := pool.side == 1 ? (lxSweepMask == 2 ? 3 : lxSweepMask == 0 ? 1 : lxSweepMask) : (lxSweepMask == 1 ? 3 : lxSweepMask == 0 ? 2 : lxSweepMask)
+        if expired or crossed or swept
+            array.remove(lxPools, i)
+        i -= 1
+    if lxSweepMask == 1 or lxSweepMask == 3
+        f_lxLabel(1, low, "Quét SSL", "Vượt đáy đã xác nhận và đóng lấy lại; chưa hàm ý đảo chiều")
+    if lxSweepMask == 2 or lxSweepMask == 3
+        f_lxLabel(-1, high, "Quét BSL", "Vượt đỉnh đã xác nhận và đóng lấy lại; chưa hàm ý đảo chiều")
+    for side in array.from(-1, 1)
+        bool found = side == -1 ? lxSwingPh : lxSwingPl
+        if found
+            float value = side == -1 ? high[LX_SWING] : low[LX_SWING]
+            bool equalLevel = false
+            float tolerance = math.max(tick, nz(ltfAtr, 0) * 0.05)
+            for pool in lxPools
+                if pool.side == side and math.abs(pool.level - value) <= tolerance
+                    equalLevel := true
+                    pool.equalLevel := true
+            array.push(lxPools, LxPool.new(value, side, time[LX_SWING], bar_index, equalLevel))
+            if equalLevel
+                lxEqualMask += side == 1 ? 1 : 2
+                f_lxLabel(side, value, side == 1 ? "EQL" : "EQH", "Hai pivot gần nhau trong max(1 tick, 0.05 ATR); nhãn tại thời điểm xác nhận")
+    while array.size(lxPools) > 40
+        array.shift(lxPools)
+while array.size(lxLabels) > 80
+    label.delete(array.shift(lxLabels))
+while array.size(lxLines) > 80
+    line.delete(array.shift(lxLines))

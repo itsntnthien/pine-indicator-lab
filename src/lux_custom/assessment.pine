@@ -1,0 +1,69 @@
+// Region clocks are local/IANA, not a fixed UTC-5 approximation. Sessions do not imply entries.
+bool lxTokyo = not na(time(timeframe.period, "0900-1800:23456", "Asia/Tokyo"))
+bool lxLondon = not na(time(timeframe.period, "0800-1700:23456", "Europe/London"))
+bool lxNewYork = not na(time(timeframe.period, "0800-1700:23456", "America/New_York"))
+string lxSession = (lxTokyo ? "Tokyo " : "") + (lxLondon ? "London " : "") + (lxNewYork ? "New York" : "")
+lxSession := lxSession == "" ? "Ngoài giờ phiên tham chiếu" : lxSession
+[lxPreviousDayHigh, lxPreviousDayLow] = request.security(syminfo.tickerid, dayRequest, [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[lxPreviousWeekHigh, lxPreviousWeekLow] = request.security(syminfo.tickerid, weekRequest, [high[1], low[1]], lookahead = barmerge.lookahead_on)
+
+var string lxAssessment = "Chờ nến giá tiêu chuẩn đóng"
+var string lxConflict = "Chưa đủ dữ liệu"
+var string lxWatch = "Quan sát phản ứng tại vùng đã xác nhận"
+var string lxLocation = "Chưa có biên swing hợp lệ"
+var string lxNearby = "Chưa có vùng HTF"
+var string lxLastEvent = "Chưa có sự kiện"
+var int lxObservedAt = na
+var int lxLastSweep = 0
+var int lxLastSweepBar = na
+var int lxLastEventAt = na
+var float lxEquilibrium = na
+var float lxRangeHigh = na
+var float lxRangeLow = na
+var float lxNearestAbove = na
+var float lxNearestBelow = na
+bool lxContextConflict = h1Request == "60" and h4Request == "240" and contextConflict
+
+if barstate.isconfirmed and standardChart
+    lxObservedAt := time_close
+    lxRangeHigh := lxSwing.hi
+    lxRangeLow := lxSwing.lo
+    lxEquilibrium := not na(lxRangeHigh) and not na(lxRangeLow) and lxRangeHigh > lxRangeLow ? math.avg(lxRangeHigh, lxRangeLow) : na
+    lxLocation := na(lxEquilibrium) ? "Chưa có biên swing hợp lệ" : close > lxRangeHigh ? "Ngoài biên trên swing" : close < lxRangeLow ? "Ngoài biên dưới swing" : math.abs(close - lxEquilibrium) <= tick ? "Equilibrium" : close > lxEquilibrium ? "Premium của swing chart" : "Discount của swing chart"
+    lxNearestAbove := na
+    lxNearestBelow := na
+    for pool in lxPools
+        if pool.level > close and (na(lxNearestAbove) or pool.level < lxNearestAbove)
+            lxNearestAbove := pool.level
+        if pool.level < close and (na(lxNearestBelow) or pool.level > lxNearestBelow)
+            lxNearestBelow := pool.level
+    float distance = na
+    lxNearby := "Chưa có vùng HTF"
+    bool activeAvailable = activeTf == "60" ? h1Request == "60" : h4Request == "240"
+    if activeAvailable
+        for zone in activeZones
+            float candidate = math.max(math.max(zone.lo - close, close - zone.hi), 0)
+            if na(distance) or candidate < distance
+                distance := candidate
+                lxNearby := (activeTf == "60" ? "H1 " : "H4 ") + zone.kind + " " + f_price(zone.lo) + "–" + f_price(zone.hi) + (candidate == 0 ? " • close trong vùng" : high >= zone.lo and low <= zone.hi ? " • nến vừa giao vùng" : " • ngoài vùng")
+    if lxSweepMask != 0
+        lxLastSweep := lxSweepMask
+        lxLastSweepBar := bar_index
+        lxLastEvent := lxSweepMask == 3 ? "Quét cả BSL và SSL" : lxSweepMask == 1 ? "Quét SSL và đóng lấy lại" : "Quét BSL và đóng lấy lại"
+        lxLastEventAt := time_close
+    else if lxSwingBreak != 0 or lxInternalBreak != 0
+        int kind = lxSwingBreak != 0 ? lxSwingType : lxInternalType
+        int side = lxSwingBreak != 0 ? lxSwingBreak : lxInternalBreak
+        lxLastEvent := (lxSwingBreak != 0 ? "Swing " : "Internal ") + (kind == 1 ? "INIT " : kind == 2 ? "BOS " : "CHoCH ") + f_direction(side)
+        lxLastEventAt := time_close
+    else if lxInversionCount > 0
+        lxLastEvent := "Đóng xuyên vùng → IFVG / breaker"
+        lxLastEventAt := time_close
+    bool recentSweep = not na(lxLastSweepBar) and bar_index - lxLastSweepBar <= 5
+    lxAssessment := not activeAvailable ? "Khung HTF thấp hơn chart: không diễn giải" : activeBias == 0 ? "Hướng HTF chưa xác lập" : lxContextConflict ? "H1 và H4 đang trái hướng" : recentSweep and lxLastSweep == 3 ? "Quét hai phía gần đây; bối cảnh nhiễu" : lxInternal.bias == activeBias and lxSwing.bias == activeBias ? "Cấu trúc chart cùng hướng HTF đang dùng" : lxInternal.bias == -activeBias ? "Nhịp chart ngược HTF; hồi hay đảo chưa rõ" : "Cấu trúc chart chưa đồng thuận đầy đủ"
+    lxConflict := lxContextConflict ? "Không suy đồng thuận từ một khung" : recentSweep ? "Sweep là phản ứng giá, chưa đủ kết luận đảo chiều" : "Premium/Discount là vị trí, không phải tín hiệu"
+    lxWatch := not activeAvailable ? "Dùng chart H4 trở xuống để quan sát vùng H1/H4" : activeBias == 0 ? "Chờ close phá swing đã biết để xác lập hướng" : lxInternal.bias == -activeBias ? "Theo dõi swing đối diện và vùng HTF còn hiệu lực" : "Theo dõi close giữ hay xuyên vùng đã xác nhận"
+
+if lxContextAlerts and barstate.isconfirmed and standardChart and barstate.isrealtime
+    if lxSwingBreak != 0 or lxInternalBreak != 0 or lxSweepMask != 0 or lxInversionCount > 0
+        alert("BỐI CẢNH | " + syminfo.tickerid + " " + timeframe.period + " | " + lxLastEvent + " | " + lxAssessment + " | Chỉ quan sát", alert.freq_once_per_bar_close)

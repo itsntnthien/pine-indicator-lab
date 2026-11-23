@@ -1,0 +1,115 @@
+// Test-only extension: run actual production functions on fixtures and each historical bar.
+var int witnessBars = 0
+var int witnessEvents = 0
+int witnessConfEnd = time_close(confTf)
+int witnessAnchorEnd = time_close(anchorTf)
+if barstate.isfirst
+    if f_obs_vsa(false, na, na, na, na, false) != 99 or f_obs_vsa(false, 0, 0.5, 0.8, -1, true) != 99
+        runtime.error("TEST: missing/zero volume must be unavailable")
+    if f_obs_vsa(true, 1.5, 1.2, 0.7, 1, false) != 1 or f_obs_vsa(true, 1.5, 1.2, 0.3, -1, false) != -1
+        runtime.error("TEST: wide high-volume boundary")
+    if f_obs_vsa(true, 1.5, 0.8, 0.65, 0, false) != 2 or f_obs_vsa(true, 1.5, 0.8, 0.35, 0, false) != -2
+        runtime.error("TEST: narrow high-volume boundary")
+    if f_obs_vsa(true, 0.7, 0.8, 0.5, -1, true) != 3 or f_obs_vsa(true, 0.7, 0.8, 0.5, 1, true) != -3
+        runtime.error("TEST: low-volume boundary")
+    if f_obs_vsa(true, 0.7, 0.8, 0.5, -1, false) != 0 or f_obs_vsa(true, 1.49, 1.2, 0.8, 1, false) != 0
+        runtime.error("TEST: nonqualifying cases")
+    if f_obs_candle_direction(100, 100) != 0 or f_obs_candle_direction(100, 101) != 1 or f_obs_candle_direction(100, 99) != -1
+        runtime.error("TEST: doji / candle direction")
+    if f_obs_expired(250, 250) or not f_obs_expired(251, 250)
+        runtime.error("TEST: TTL boundary")
+    if f_setup_phase(0) != 3 or f_setup_phase(128) != 2 or f_setup_phase(32) != 1 or f_setup_phase(2) != 0 or f_setup_phase(16) != 4 or f_setup_phase(36) != 6 or f_setup_phase(12) != 5
+        runtime.error("TEST: stage precedence")
+if barstate.isconfirmed
+    witnessBars += 1
+    int oldVsaCode = not vwValid ? 99 : vwDemand ? 1 : vwSupply ? -1 : vwAbsorbBuy ? 2 : vwAbsorbSell ? -2 : vwNoSupply ? 3 : vwNoDemand ? -3 : 0
+    if obsRawVsa != oldVsaCode
+        runtime.error("TEST: VSA classifier diverged from original patterns")
+    if smcCalculationTf and (obsVsa != obsRawVsa or obsTime != time_close)
+        runtime.error("TEST: snapshot not committed at bar close")
+    if not smcCalculationTf and (not na(obsTime) or array.size(obsLabels) > 0)
+        runtime.error("TEST: nonstandard chart produced observations")
+    if array.size(smcLiquidity) > LIQUIDITY_CAPACITY or array.size(smcFvgs) > FVG_CAPACITY or array.size(smcObs) > OB_CAPACITY or array.size(obsLabels) > eventLimit
+        runtime.error("TEST: unbounded collections")
+    for item in smcFvgs
+        if item.terminal or f_obs_expired(smcCanonicalBarIndex - item.creation_bar_index, SMC_FVG_MAX_AGE_BARS)
+            runtime.error("TEST: stale FVG survived")
+    for item in smcObs
+        if item.terminal or f_obs_expired(smcCanonicalBarIndex - item.creation_bar_index, SMC_OB_MAX_AGE_BARS)
+            runtime.error("TEST: stale OB survived")
+        if item.first_touch_bar == item.creation_bar_index
+            runtime.error("TEST: OB touched on creation bar")
+        if item.source_time >= item.creation_time
+            runtime.error("TEST: OB source must precede confirmation")
+    for item in smcFvgs
+        if item.creation_bar_index == smcCanonicalBarIndex and (time != time_close[1] or time[1] != time_close[2])
+            runtime.error("TEST: discontinuous FVG")
+    if not vwValid and (obsLongMask == 0 or obsShortMask == 0)
+        runtime.error("TEST: invalid volume allowed confluence")
+    if supportedTf and ((confCommittedValid and confLastCommittedEnd > time_close) or (anchorCommittedValid and anchorLastCommittedEnd > time_close))
+        runtime.error("TEST: future HTF bucket")
+    if supportedTf and time_close == witnessConfEnd and (not confCommittedValid or confLastCommittedEnd != time_close)
+        runtime.error("TEST: confirmation HTF delayed at simultaneous close")
+    if supportedTf and time_close == witnessAnchorEnd and (not anchorCommittedValid or anchorLastCommittedEnd != time_close)
+        runtime.error("TEST: anchor HTF delayed at simultaneous close")
+    if obsVsa != 0 and obsVsa != 99 and smcCalculationTf
+        witnessEvents += 1
+if barstate.islastconfirmedhistory
+    log.info("VSA_OBSERVER_NATIVE_PASS|" + syminfo.tickerid + "|" + timeframe.period + "|standard=" + str.tostring(chart.is_standard) + "|bars=" + str.tostring(witnessBars) + "|events=" + str.tostring(witnessEvents) + "|fixtures=15")
+if barstate.islastconfirmedhistory or barstate.islast
+    if array.size(line.all) != 25 + obsStructureLimit + array.size(obsSweepWicks) or array.size(box.all) != 14 + array.size(obsSweepBoxes) or array.size(label.all) > eventLimit + obsStructureLimit + 11
+        runtime.error("TEST: renderer slot bounds")
+    if array.size(obsStructureStarts) != array.size(obsStructureEvents) or array.size(obsStructureEvents) > obsStructureLimit
+        runtime.error("TEST: structure anchors out of sync")
+    int visibleStructures = 0
+    for slot = 0 to obsStructureLimit - 1
+        line segment = array.get(obsStructureLines, slot)
+        bool expected = showMarketStructure and slot < array.size(obsStructureEvents)
+        if expected and obsMode == "Present" and slot < array.size(obsStructureEvents) - 1
+            for later = slot + 1 to array.size(obsStructureEvents) - 1
+                if math.sign(array.get(obsStructureEvents, later).event_type) == math.sign(array.get(obsStructureEvents, slot).event_type)
+                    expected := false
+        if expected
+            visibleStructures += 1
+            StructuralEvent event = array.get(obsStructureEvents, slot)
+            int origin = array.get(obsStructureStarts, slot)
+            float level = event.price_ticks * syminfo.mintick
+            if na(origin) or origin >= event.time or line.get_x1(segment) != origin or line.get_x2(segment) != event.time or line.get_y1(segment) != level or line.get_y2(segment) != level or label.get_y(array.get(obsStructureLabels, slot)) != level
+                runtime.error("TEST: structure segment does not match broken level")
+        else if not na(line.get_y1(segment)) or not na(label.get_y(array.get(obsStructureLabels, slot)))
+            runtime.error("TEST: hidden structure still visible")
+    if obsMode == "Present" and visibleStructures > 2
+        runtime.error("TEST: Present mode retained stale structures")
+    for slot = 0 to 13
+        box zone = array.get(obsBoxes, slot)
+        line mid = array.get(obsMidLines, slot)
+        if obsShowMid and not na(box.get_top(zone))
+            if math.abs(line.get_y1(mid) - math.avg(box.get_top(zone), box.get_bottom(zone))) > syminfo.mintick * 0.001 or line.get_y1(mid) != line.get_y2(mid)
+                runtime.error("TEST: zone midpoint geometry")
+        else if not na(line.get_y1(mid))
+            runtime.error("TEST: hidden midpoint still visible")
+    if array.size(obsSweepBoxes) != array.size(obsSweepWicks) or array.size(obsSweepBoxes) > eventLimit
+        runtime.error("TEST: sweep drawing bounds")
+    if array.size(obsSweepBoxes) > 0
+        for slot = 0 to array.size(obsSweepBoxes) - 1
+            box area = array.get(obsSweepBoxes, slot)
+            line wick = array.get(obsSweepWicks, slot)
+            if box.get_left(area) != line.get_x1(wick) or line.get_x1(wick) != line.get_x2(wick) or box.get_top(area) != math.max(line.get_y1(wick), line.get_y2(wick)) or box.get_bottom(area) != math.min(line.get_y1(wick), line.get_y2(wick))
+                runtime.error("TEST: sweep box/marker mismatch")
+    for z in smcFvgs
+        if showFvg and (z.creation_sequence_id == obsLongZoneId or z.creation_sequence_id == obsShortZoneId)
+            bool drawn = false
+            for object in obsBoxes
+                drawn := drawn or (box.get_left(object) == z.creation_time and box.get_top(object) == z.top_ticks * syminfo.mintick and box.get_bottom(object) == z.bottom_ticks * syminfo.mintick)
+            if not drawn
+                runtime.error("TEST: dashboard FVG not drawn")
+    for z in smcObs
+        if showOrderBlocks and (z.creation_sequence_id == obsLongZoneId or z.creation_sequence_id == obsShortZoneId)
+            bool drawn = false
+            for object in obsBoxes
+                drawn := drawn or (box.get_left(object) == z.creation_time and box.get_top(object) == z.top_ticks * syminfo.mintick and box.get_bottom(object) == z.bottom_ticks * syminfo.mintick)
+            if not drawn
+                runtime.error("TEST: dashboard OB not drawn")
+if barstate.isrealtime and not barstate.isconfirmed and not na(obsTime[1])
+    if obsDataIssue != obsDataIssue[1] or obsVolumeStreak != obsVolumeStreak[1] or obsRenderedBar != obsRenderedBar[1]
+        runtime.error("TEST: renderer/data changed intrabar")

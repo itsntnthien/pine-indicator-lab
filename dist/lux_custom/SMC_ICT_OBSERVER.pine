@@ -1,0 +1,522 @@
+//@version=6
+indicator("SMC ICT Observer • XAU / NAS", "SMC ICT Observer", overlay = true, max_boxes_count = 100, max_labels_count = 120, max_lines_count = 120, max_bars_back = 500)
+int BUILD_TOKEN = 64157540051458
+// Research derivative, 2026-11-15. Not an official LuxAlgo product.
+// Portions adapted from © LuxAlgo: SMC, Pure Price Action Structures, Liquidity Sweeps,
+// Fair Value Gap, Inversion FVG, Order Blocks & Breaker Blocks, ICT Concepts.
+// CC BY-NC-SA 4.0: https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Changes: confirmed-bar state, causal availability, bounded storage, single inversion,
+// explicit INIT, DST-aware sessions and deterministic observation-only assessment.
+// Full source IDs, versions and hashes: docs/LUX_CUSTOM_ATTRIBUTION.json.
+
+string lxGroup = "Lớp quan sát"
+bool showZones = input.bool(true, "Vùng HTF", group = lxGroup)
+bool showPanel = input.bool(true, "Bảng nhận định", group = lxGroup)
+int visibleGroups = input.int(8, "Số vùng HTF gần giá", minval = 2, maxval = 16, group = lxGroup)
+bool lxShowStructure = input.bool(true, "BOS / CHoCH / sweep / EQH-EQL", group = lxGroup)
+bool lxShowRegions = input.bool(true, "OB / breaker / FVG / IFVG khung chart", group = lxGroup)
+bool lxShowRange = input.bool(true, "Premium / Discount từ swing đã xác nhận", group = lxGroup)
+bool lxShowPrevious = input.bool(false, "High / Low ngày và tuần trước", group = lxGroup)
+bool lxShowSessions = input.bool(false, "Tô nền giờ phiên địa phương", group = lxGroup)
+bool lxContextAlerts = input.bool(false, "Thông báo thay đổi bối cảnh", group = lxGroup)
+int LX_INTERNAL = 2
+int LX_SWING = 5
+int LX_TTL = 200
+int LX_REGION_LIMIT = 64
+int ATR_LENGTH = 14
+int MAX_AGE = 100
+float SR_ATR = 0.2
+float FVG_ATR = 0.1
+float tick = syminfo.mintick
+bool standardChart = chart.is_standard
+string activeTf = timeframe.in_seconds() <= 300 ? "60" : "240"
+
+type Zone
+    string id
+    string kind
+    int side
+    float lo
+    float hi
+    int anchor
+    int available
+    int bornIndex
+
+f_price(float value) =>
+    na(value) ? "Chưa đủ dữ liệu" : str.tostring(value, format.mintick)
+
+f_direction(int value) =>
+    value == 1 ? "TĂNG" : value == -1 ? "GIẢM" : "CHƯA RÕ"
+
+type LxStructure
+    float hi = na
+    float lo = na
+    int hiTime = na
+    int loTime = na
+    int hiIndex = na
+    int loIndex = na
+    bool hiBroken = false
+    bool loBroken = false
+    int bias = 0
+
+type LxPool
+    float level
+    int side
+    int anchor
+    int born
+    bool equalLevel
+
+type LxRegion
+    string id
+    string kind
+    int side
+    float lo
+    float hi
+    int anchor
+    int born
+    int available
+    int stage = 0
+
+var array<label> lxLabels = array.new<label>()
+var array<line> lxLines = array.new<line>()
+
+f_lxLabel(int side, float price, string caption, string detail) =>
+    if lxShowStructure
+        array.push(lxLabels, label.new(time, price, caption, xloc = xloc.bar_time, style = side == 1 ? label.style_label_up : label.style_label_down, color = color.new(side == 1 ? color.teal : color.orange, 80), textcolor = side == 1 ? color.teal : color.orange, size = size.tiny, tooltip = detail))
+    0
+
+f_lxBreak(int side, int eventType, float level, int anchor, string layer) =>
+    if side != 0
+        string caption = layer + " " + (eventType == 1 ? "INIT" : eventType == 2 ? "BOS" : "CHoCH")
+        f_lxLabel(side, level, caption, "Chốt: " + str.format_time(time_close, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN; pivot gốc: " + str.format_time(anchor, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + "; chỉ quan sát")
+        if lxShowStructure
+            array.push(lxLines, line.new(anchor, level, time, level, xloc = xloc.bar_time, color = color.new(side == 1 ? color.teal : color.orange, layer == "i" ? 60 : 20), style = layer == "i" ? line.style_dotted : line.style_solid))
+    0
+
+// This function runs in each requested timeframe. All returned fields are offset together.
+f_context() =>
+    float a = ta.atr(ATR_LENGTH)
+    bool ph = not na(high[4]) and high[2] > high[3] and high[2] > high[4] and high[2] >= high[1] and high[2] >= high
+    bool pl = not na(low[4]) and low[2] < low[3] and low[2] < low[4] and low[2] <= low[1] and low[2] <= low
+    var float lastHigh = na
+    var float lastLow = na
+    var int highIdentity = na
+    var int lowIdentity = na
+    var int brokenHigh = na
+    var int brokenLow = na
+    var int bias = 0
+    bool up = not na(lastHigh) and close > lastHigh and (na(brokenHigh) or brokenHigh != highIdentity)
+    bool down = not na(lastLow) and close < lastLow and (na(brokenLow) or brokenLow != lowIdentity)
+    int breakSide = up and not down ? 1 : down and not up ? -1 : 0
+    if up and down
+        bias := 0
+    else if breakSide != 0
+        bias := breakSide
+    if up
+        brokenHigh := highIdentity
+    if down
+        brokenLow := lowIdentity
+    float obLo = na
+    float obHi = na
+    if breakSide != 0 and not na(a) and a > 0
+        for k = 1 to 10
+            bool opposite = breakSide == 1 ? close[k] < open[k] : close[k] > open[k]
+            if opposite
+                obLo := low[k]
+                obHi := high[k]
+                break
+    float pivotHigh = ph and not na(a) and a > 0 ? high[2] : na
+    float pivotLow = pl and not na(a) and a > 0 ? low[2] : na
+    // A new pivot cannot be broken before its confirmation was available.
+    if ph
+        lastHigh := high[2]
+        highIdentity := time[2]
+    if pl
+        lastLow := low[2]
+        lowIdentity := time[2]
+    float minGap = math.max(FVG_ATR * a, syminfo.mintick)
+    int fvgSide = not na(a) and a > 0 ? (low - high[2] >= minGap ? 1 : low[2] - high >= minGap ? -1 : 0) : 0
+    float fvgLo = fvgSide == 1 ? high[2] : fvgSide == -1 ? high : na
+    float fvgHi = fvgSide == 1 ? low : fvgSide == -1 ? low[2] : na
+    int sdSide = 0
+    float sdLo = na
+    float sdHi = na
+    float baseLow = na
+    float baseHigh = na
+    bool compact = true
+    if not na(a[1]) and a[1] > 0 and math.abs(close - open) >= a[1]
+        for k = 1 to 3
+            float span = high[k] - low[k]
+            compact := compact and not na(span) and span > 0 and math.abs(close[k] - open[k]) <= span * 0.5
+            baseLow := na(baseLow) ? low[k] : math.min(baseLow, low[k])
+            baseHigh := na(baseHigh) ? high[k] : math.max(baseHigh, high[k])
+            if compact and baseHigh - baseLow <= a[1]
+                int departure = close > baseHigh and close > open ? 1 : close < baseLow and close < open ? -1 : 0
+                if departure != 0
+                    sdSide := departure
+                    sdLo := baseLow
+                    sdHi := baseHigh
+    [time[1], time_close[1], bar_index[1], close[1], a[1], bias[1], pivotHigh[1], pivotLow[1], time[3], breakSide[1], obLo[1], obHi[1], fvgSide[1], fvgLo[1], fvgHi[1], sdSide[1], sdLo[1], sdHi[1]]
+
+// Never request lower-timeframe context and mislabel it as confirmed HTF.
+string h1Request = timeframe.in_seconds() <= 3600 ? "60" : timeframe.period
+string h4Request = timeframe.in_seconds() <= 14400 ? "240" : timeframe.period
+string dayRequest = timeframe.in_seconds() <= 86400 ? "D" : timeframe.period
+string weekRequest = timeframe.in_seconds() <= 604800 ? "W" : timeframe.period
+[h1Time, h1CloseTime, h1Index, h1Close, h1Atr, h1Bias, h1Ph, h1Pl, h1Anchor, h1ObDir, h1ObLo, h1ObHi, h1FvgDir, h1FvgLo, h1FvgHi, h1SdDir, h1SdLo, h1SdHi] = request.security(syminfo.tickerid, h1Request, f_context(), lookahead = barmerge.lookahead_on)
+[h4Time, h4CloseTime, h4Index, h4Close, h4Atr, h4Bias, h4Ph, h4Pl, h4Anchor, h4ObDir, h4ObLo, h4ObHi, h4FvgDir, h4FvgLo, h4FvgHi, h4SdDir, h4SdLo, h4SdHi] = request.security(syminfo.tickerid, h4Request, f_context(), lookahead = barmerge.lookahead_on)
+[dTime, dCloseTime, dIndex, dClose, dAtr, dBias, dPh, dPl, dAnchor, dObDir, dObLo, dObHi, dFvgDir, dFvgLo, dFvgHi, dSdDir, dSdLo, dSdHi] = request.security(syminfo.tickerid, dayRequest, f_context(), lookahead = barmerge.lookahead_on)
+[wTime, wCloseTime, wIndex, wClose, wAtr, wBias, wPh, wPl, wAnchor, wObDir, wObLo, wObHi, wFvgDir, wFvgLo, wFvgHi, wSdDir, wSdLo, wSdHi] = request.security(syminfo.tickerid, weekRequest, f_context(), lookahead = barmerge.lookahead_on)
+float ltfAtr = ta.atr(ATR_LENGTH)
+int activeBias = nz(activeTf == "60" ? h1Bias : h4Bias, 0)
+int otherBias = nz(activeTf == "60" ? h4Bias : h1Bias, 0)
+bool contextConflict = activeBias != 0 and otherBias != 0 and activeBias != otherBias
+
+var array<Zone> h1Zones = array.new<Zone>()
+var array<Zone> h4Zones = array.new<Zone>()
+
+f_addZone(array<Zone> zones, string tf, string kind, int side, float lo, float hi, int anchor, int available, int born) =>
+    if not na(lo) and not na(hi) and lo <= hi and side != 0
+        string id = syminfo.tickerid + ":" + tf + ":" + kind + ":" + str.tostring(side) + ":" + str.tostring(anchor) + ":" + str.tostring(available)
+        array.push(zones, Zone.new(id, kind, side, lo, hi, anchor, available, born))
+        if kind == "BSL" or kind == "SSL" or kind == "SR"
+            int count = 0
+            for z in zones
+                if z.kind == kind and z.side == side
+                    count += 1
+            int i = 0
+            while count > 3 and i < array.size(zones)
+                Zone old = array.get(zones, i)
+                if old.kind == kind and old.side == side
+                    array.remove(zones, i)
+                    count -= 1
+                else
+                    i += 1
+    0
+
+f_ingest(array<Zone> zones, string tf, int stamp, int available, int index, float c, float atr, float ph, float pl, int anchor, int obDir, float obLo, float obHi, int fvgDir, float fvgLo, float fvgHi, int sdDir, float sdLo, float sdHi) =>
+    int i = array.size(zones) - 1
+    while i >= 0
+        Zone z = array.get(zones, i)
+        bool invalid = z.side == 1 ? c < z.lo : c > z.hi
+        if invalid or index - z.bornIndex >= MAX_AGE
+            array.remove(zones, i)
+        i -= 1
+    if not na(atr) and atr > 0
+        if not na(ph)
+            f_addZone(zones, tf, "BSL", -1, ph, ph, anchor, available, index)
+            f_addZone(zones, tf, "SR", -1, ph - SR_ATR * atr, ph + SR_ATR * atr, anchor, available, index)
+        if not na(pl)
+            f_addZone(zones, tf, "SSL", 1, pl, pl, anchor, available, index)
+            f_addZone(zones, tf, "SR", 1, pl - SR_ATR * atr, pl + SR_ATR * atr, anchor, available, index)
+        f_addZone(zones, tf, "OB", obDir, obLo, obHi, stamp, available, index)
+        f_addZone(zones, tf, "FVG", fvgDir, fvgLo, fvgHi, stamp, available, index)
+        f_addZone(zones, tf, "SD", sdDir, sdLo, sdHi, stamp, available, index)
+    0
+
+bool newH1 = not na(h1Time) and (na(h1Time[1]) or h1Time != h1Time[1])
+bool newH4 = not na(h4Time) and (na(h4Time[1]) or h4Time != h4Time[1])
+if h1Request == "60" and newH1
+    f_ingest(h1Zones, "60", h1Time, h1CloseTime, h1Index, h1Close, h1Atr, h1Ph, h1Pl, h1Anchor, h1ObDir, h1ObLo, h1ObHi, h1FvgDir, h1FvgLo, h1FvgHi, h1SdDir, h1SdLo, h1SdHi)
+if h4Request == "240" and newH4
+    f_ingest(h4Zones, "240", h4Time, h4CloseTime, h4Index, h4Close, h4Atr, h4Ph, h4Pl, h4Anchor, h4ObDir, h4ObLo, h4ObHi, h4FvgDir, h4FvgLo, h4FvgHi, h4SdDir, h4SdLo, h4SdHi)
+array<Zone> activeZones = activeTf == "60" ? h1Zones : h4Zones
+
+// Adapted structure state / wick reclaim concepts from LuxAlgo; see attribution manifest.
+// Breaks use previously known pivots; new pivots become usable on the next bar.
+f_lxPivots(int length) =>
+    bool ph = not na(high[2 * length])
+    bool pl = ph
+    for k = 1 to length
+        ph := ph and high[length] > high[length + k] and high[length] >= high[length - k]
+        pl := pl and low[length] < low[length + k] and low[length] <= low[length - k]
+    [ph, pl]
+
+f_lxAdvance(LxStructure state, bool ph, bool pl, int length) =>
+    int side = 0
+    int eventType = 0
+    float level = na
+    int anchor = na
+    if barstate.isconfirmed and standardChart
+        bool up = not state.hiBroken and not na(state.hi) and close > state.hi
+        bool down = not state.loBroken and not na(state.lo) and close < state.lo
+        if up and down
+            state.bias := 0
+        else if up or down
+            side := up ? 1 : -1
+            eventType := state.bias == 0 ? 1 : state.bias == side ? 2 : 3
+            level := up ? state.hi : state.lo
+            anchor := up ? state.hiTime : state.loTime
+            state.bias := side
+        if up
+            state.hiBroken := true
+        if down
+            state.loBroken := true
+        if ph
+            state.hi := high[length]
+            state.hiTime := time[length]
+            state.hiIndex := bar_index - length
+            state.hiBroken := false
+        if pl
+            state.lo := low[length]
+            state.loTime := time[length]
+            state.loIndex := bar_index - length
+            state.loBroken := false
+    [side, eventType, level, anchor]
+
+var LxStructure lxInternal = LxStructure.new()
+var LxStructure lxSwing = LxStructure.new()
+var array<LxPool> lxPools = array.new<LxPool>()
+[lxInternalPh, lxInternalPl] = f_lxPivots(LX_INTERNAL)
+[lxSwingPh, lxSwingPl] = f_lxPivots(LX_SWING)
+[lxInternalBreak, lxInternalType, lxInternalLevel, lxInternalAnchor] = f_lxAdvance(lxInternal, lxInternalPh, lxInternalPl, LX_INTERNAL)
+[lxSwingBreak, lxSwingType, lxSwingLevel, lxSwingAnchor] = f_lxAdvance(lxSwing, lxSwingPh, lxSwingPl, LX_SWING)
+f_lxBreak(lxInternalBreak, lxInternalType, lxInternalLevel, lxInternalAnchor, "i")
+f_lxBreak(lxSwingBreak, lxSwingType, lxSwingLevel, lxSwingAnchor, "s")
+
+int lxSweepMask = 0
+int lxEqualMask = 0
+if barstate.isconfirmed and standardChart
+    int i = array.size(lxPools) - 1
+    while i >= 0
+        LxPool pool = array.get(lxPools, i)
+        bool expired = bar_index - pool.born >= LX_TTL
+        bool crossed = pool.side == 1 ? close < pool.level : close > pool.level
+        bool swept = pool.side == 1 ? low <= pool.level - tick and close >= pool.level + tick : high >= pool.level + tick and close <= pool.level - tick
+        if not expired and swept
+            lxSweepMask := pool.side == 1 ? (lxSweepMask == 2 ? 3 : lxSweepMask == 0 ? 1 : lxSweepMask) : (lxSweepMask == 1 ? 3 : lxSweepMask == 0 ? 2 : lxSweepMask)
+        if expired or crossed or swept
+            array.remove(lxPools, i)
+        i -= 1
+    if lxSweepMask == 1 or lxSweepMask == 3
+        f_lxLabel(1, low, "Quét SSL", "Vượt đáy đã xác nhận và đóng lấy lại; chưa hàm ý đảo chiều")
+    if lxSweepMask == 2 or lxSweepMask == 3
+        f_lxLabel(-1, high, "Quét BSL", "Vượt đỉnh đã xác nhận và đóng lấy lại; chưa hàm ý đảo chiều")
+    for side in array.from(-1, 1)
+        bool found = side == -1 ? lxSwingPh : lxSwingPl
+        if found
+            float value = side == -1 ? high[LX_SWING] : low[LX_SWING]
+            bool equalLevel = false
+            float tolerance = math.max(tick, nz(ltfAtr, 0) * 0.05)
+            for pool in lxPools
+                if pool.side == side and math.abs(pool.level - value) <= tolerance
+                    equalLevel := true
+                    pool.equalLevel := true
+            array.push(lxPools, LxPool.new(value, side, time[LX_SWING], bar_index, equalLevel))
+            if equalLevel
+                lxEqualMask += side == 1 ? 1 : 2
+                f_lxLabel(side, value, side == 1 ? "EQL" : "EQH", "Hai pivot gần nhau trong max(1 tick, 0.05 ATR); nhãn tại thời điểm xác nhận")
+    while array.size(lxPools) > 40
+        array.shift(lxPools)
+while array.size(lxLabels) > 80
+    label.delete(array.shift(lxLabels))
+while array.size(lxLines) > 80
+    line.delete(array.shift(lxLines))
+
+// LuxAlgo FVG / inverse FVG / OB-breaker concepts, rewritten as one bounded lifecycle.
+var array<LxRegion> lxRegions = array.new<LxRegion>()
+
+f_lxAddRegion(string kind, int side, float lo, float hi, int anchor) =>
+    if side != 0 and not na(lo) and not na(hi) and hi > lo
+        string identity = kind + ":" + str.tostring(side) + ":" + str.tostring(anchor) + ":" + str.tostring(time_close)
+        array.push(lxRegions, LxRegion.new(identity, kind, side, lo, hi, anchor, bar_index, bar_index))
+    0
+
+int lxInversionCount = 0
+if barstate.isconfirmed and standardChart
+    int i = array.size(lxRegions) - 1
+    while i >= 0
+        LxRegion region = array.get(lxRegions, i)
+        bool remove = bar_index - region.born >= LX_TTL
+        if not remove and bar_index > region.available
+            bool invalid = region.side == 1 ? close < region.lo : close > region.hi
+            bool touched = high >= region.lo and low <= region.hi
+            bool filled = region.side == 1 ? low <= region.lo : high >= region.hi
+            if invalid
+                if region.kind == "FVG" or region.kind == "OB"
+                    region.kind := region.kind == "FVG" ? "IFVG" : "BRK"
+                    region.side := -region.side
+                    region.available := bar_index
+                    region.stage := 0
+                    lxInversionCount += 1
+                else
+                    remove := true
+            else if touched
+                region.stage := filled ? 2 : math.max(region.stage, 1)
+        if remove
+            array.remove(lxRegions, i)
+        i -= 1
+    if not na(ltfAtr) and ltfAtr > 0
+        float minGap = math.max(tick, 0.1 * ltfAtr)
+        if low - high[2] >= minGap and close[1] > high[2]
+            f_lxAddRegion("FVG", 1, high[2], low, time[1])
+        if low[2] - high >= minGap and close[1] < low[2]
+            f_lxAddRegion("FVG", -1, high, low[2], time[1])
+        if lxSwingBreak != 0
+            for k = 1 to 10
+                bool opposite = lxSwingBreak == 1 ? close[k] < open[k] : close[k] > open[k]
+                if opposite
+                    f_lxAddRegion("OB", lxSwingBreak, low[k], high[k], time[k])
+                    break
+    while array.size(lxRegions) > LX_REGION_LIMIT
+        array.shift(lxRegions)
+
+// Region clocks are local/IANA, not a fixed UTC-5 approximation. Sessions do not imply entries.
+bool lxTokyo = not na(time(timeframe.period, "0900-1800:23456", "Asia/Tokyo"))
+bool lxLondon = not na(time(timeframe.period, "0800-1700:23456", "Europe/London"))
+bool lxNewYork = not na(time(timeframe.period, "0800-1700:23456", "America/New_York"))
+string lxSession = (lxTokyo ? "Tokyo " : "") + (lxLondon ? "London " : "") + (lxNewYork ? "New York" : "")
+lxSession := lxSession == "" ? "Ngoài giờ phiên tham chiếu" : lxSession
+[lxPreviousDayHigh, lxPreviousDayLow] = request.security(syminfo.tickerid, dayRequest, [high[1], low[1]], lookahead = barmerge.lookahead_on)
+[lxPreviousWeekHigh, lxPreviousWeekLow] = request.security(syminfo.tickerid, weekRequest, [high[1], low[1]], lookahead = barmerge.lookahead_on)
+
+var string lxAssessment = "Chờ nến giá tiêu chuẩn đóng"
+var string lxConflict = "Chưa đủ dữ liệu"
+var string lxWatch = "Quan sát phản ứng tại vùng đã xác nhận"
+var string lxLocation = "Chưa có biên swing hợp lệ"
+var string lxNearby = "Chưa có vùng HTF"
+var string lxLastEvent = "Chưa có sự kiện"
+var int lxObservedAt = na
+var int lxLastSweep = 0
+var int lxLastSweepBar = na
+var int lxLastEventAt = na
+var float lxEquilibrium = na
+var float lxRangeHigh = na
+var float lxRangeLow = na
+var float lxNearestAbove = na
+var float lxNearestBelow = na
+bool lxContextConflict = h1Request == "60" and h4Request == "240" and contextConflict
+
+if barstate.isconfirmed and standardChart
+    lxObservedAt := time_close
+    lxRangeHigh := lxSwing.hi
+    lxRangeLow := lxSwing.lo
+    lxEquilibrium := not na(lxRangeHigh) and not na(lxRangeLow) and lxRangeHigh > lxRangeLow ? math.avg(lxRangeHigh, lxRangeLow) : na
+    lxLocation := na(lxEquilibrium) ? "Chưa có biên swing hợp lệ" : close > lxRangeHigh ? "Ngoài biên trên swing" : close < lxRangeLow ? "Ngoài biên dưới swing" : math.abs(close - lxEquilibrium) <= tick ? "Equilibrium" : close > lxEquilibrium ? "Premium của swing chart" : "Discount của swing chart"
+    lxNearestAbove := na
+    lxNearestBelow := na
+    for pool in lxPools
+        if pool.level > close and (na(lxNearestAbove) or pool.level < lxNearestAbove)
+            lxNearestAbove := pool.level
+        if pool.level < close and (na(lxNearestBelow) or pool.level > lxNearestBelow)
+            lxNearestBelow := pool.level
+    float distance = na
+    lxNearby := "Chưa có vùng HTF"
+    bool activeAvailable = activeTf == "60" ? h1Request == "60" : h4Request == "240"
+    if activeAvailable
+        for zone in activeZones
+            float candidate = math.max(math.max(zone.lo - close, close - zone.hi), 0)
+            if na(distance) or candidate < distance
+                distance := candidate
+                lxNearby := (activeTf == "60" ? "H1 " : "H4 ") + zone.kind + " " + f_price(zone.lo) + "–" + f_price(zone.hi) + (candidate == 0 ? " • close trong vùng" : high >= zone.lo and low <= zone.hi ? " • nến vừa giao vùng" : " • ngoài vùng")
+    if lxSweepMask != 0
+        lxLastSweep := lxSweepMask
+        lxLastSweepBar := bar_index
+        lxLastEvent := lxSweepMask == 3 ? "Quét cả BSL và SSL" : lxSweepMask == 1 ? "Quét SSL và đóng lấy lại" : "Quét BSL và đóng lấy lại"
+        lxLastEventAt := time_close
+    else if lxSwingBreak != 0 or lxInternalBreak != 0
+        int kind = lxSwingBreak != 0 ? lxSwingType : lxInternalType
+        int side = lxSwingBreak != 0 ? lxSwingBreak : lxInternalBreak
+        lxLastEvent := (lxSwingBreak != 0 ? "Swing " : "Internal ") + (kind == 1 ? "INIT " : kind == 2 ? "BOS " : "CHoCH ") + f_direction(side)
+        lxLastEventAt := time_close
+    else if lxInversionCount > 0
+        lxLastEvent := "Đóng xuyên vùng → IFVG / breaker"
+        lxLastEventAt := time_close
+    bool recentSweep = not na(lxLastSweepBar) and bar_index - lxLastSweepBar <= 5
+    lxAssessment := not activeAvailable ? "Khung HTF thấp hơn chart: không diễn giải" : activeBias == 0 ? "Hướng HTF chưa xác lập" : lxContextConflict ? "H1 và H4 đang trái hướng" : recentSweep and lxLastSweep == 3 ? "Quét hai phía gần đây; bối cảnh nhiễu" : lxInternal.bias == activeBias and lxSwing.bias == activeBias ? "Cấu trúc chart cùng hướng HTF đang dùng" : lxInternal.bias == -activeBias ? "Nhịp chart ngược HTF; hồi hay đảo chưa rõ" : "Cấu trúc chart chưa đồng thuận đầy đủ"
+    lxConflict := lxContextConflict ? "Không suy đồng thuận từ một khung" : recentSweep ? "Sweep là phản ứng giá, chưa đủ kết luận đảo chiều" : "Premium/Discount là vị trí, không phải tín hiệu"
+    lxWatch := not activeAvailable ? "Dùng chart H4 trở xuống để quan sát vùng H1/H4" : activeBias == 0 ? "Chờ close phá swing đã biết để xác lập hướng" : lxInternal.bias == -activeBias ? "Theo dõi swing đối diện và vùng HTF còn hiệu lực" : "Theo dõi close giữ hay xuyên vùng đã xác nhận"
+
+if lxContextAlerts and barstate.isconfirmed and standardChart and barstate.isrealtime
+    if lxSwingBreak != 0 or lxInternalBreak != 0 or lxSweepMask != 0 or lxInversionCount > 0
+        alert("BỐI CẢNH | " + syminfo.tickerid + " " + timeframe.period + " | " + lxLastEvent + " | " + lxAssessment + " | Chỉ quan sát", alert.freq_once_per_bar_close)
+
+var array<box> lxDrawings = array.new<box>()
+var array<line> lxPoolDrawings = array.new<line>()
+var table lxPanel = table.new(position.top_right, 2, 13, bgcolor = color.new(color.black, 15), border_width = 1)
+
+f_lxRow(int row, string heading, string value, color ink) =>
+    table.cell(lxPanel, 0, row, heading, text_color = color.silver, text_size = size.small, text_halign = text.align_left)
+    table.cell(lxPanel, 1, row, value, text_color = ink, text_size = size.small, text_halign = text.align_left)
+
+if barstate.islast
+    while array.size(lxDrawings) > 0
+        box.delete(array.pop(lxDrawings))
+    while array.size(lxPoolDrawings) > 0
+        line.delete(array.pop(lxPoolDrawings))
+    int edge = time + int(timeframe.in_seconds() * 1000)
+    if standardChart
+        bool activeAvailable = activeTf == "60" ? h1Request == "60" : h4Request == "240"
+        if showZones and activeAvailable
+            array<float> distances = array.new<float>()
+            for zone in activeZones
+                array.push(distances, math.max(math.max(zone.lo - close, close - zone.hi), 0))
+            array<int> order = array.sort_indices(distances)
+            int shown = 0
+            for index in order
+                if shown < visibleGroups
+                    Zone zone = array.get(activeZones, index)
+                    color ink = zone.side == 1 ? color.teal : color.orange
+                    string caption = (activeTf == "60" ? "H1 " : "H4 ") + zone.kind
+                    array.push(lxDrawings, box.new(zone.available, zone.hi, edge, zone.lo, xloc = xloc.bar_time, bgcolor = color.new(ink, 90), border_color = color.new(ink, 50), text = caption, text_color = ink, text_size = size.tiny, text_halign = text.align_right))
+                    shown += 1
+        if lxShowRegions
+            array<float> distances = array.new<float>()
+            for region in lxRegions
+                array.push(distances, math.max(math.max(region.lo - close, close - region.hi), 0))
+            array<int> order = array.sort_indices(distances)
+            int shown = 0
+            for index in order
+                if shown < 8
+                    LxRegion region = array.get(lxRegions, index)
+                    color ink = region.side == 1 ? color.aqua : color.fuchsia
+                    string stage = region.stage == 0 ? "mới" : region.stage == 1 ? "đã chạm" : "đã lấp bằng wick"
+                    string caption = "Chart " + region.kind + " • " + stage
+                    // Start at confirmation, not at the historical origin candle.
+                    int offset = bar_index - region.available
+                    array.push(lxDrawings, box.new(time[offset], region.hi, edge, region.lo, xloc = xloc.bar_time, bgcolor = color.new(ink, 94), border_color = color.new(ink, 65), border_style = line.style_dotted, text = caption, text_color = ink, text_size = size.tiny, text_halign = text.align_left))
+                    shown += 1
+        if lxShowStructure
+            array<float> distances = array.new<float>()
+            for pool in lxPools
+                array.push(distances, math.abs(pool.level - close))
+            array<int> order = array.sort_indices(distances)
+            int shown = 0
+            for index in order
+                if shown < 8
+                    LxPool pool = array.get(lxPools, index)
+                    array.push(lxPoolDrawings, line.new(pool.anchor, pool.level, edge, pool.level, xloc = xloc.bar_time, color = color.new(pool.side == 1 ? color.teal : color.orange, 45), style = pool.equalLevel ? line.style_dashed : line.style_dotted))
+                    shown += 1
+    table.clear(lxPanel, 0, 0, 1, 12)
+    if showPanel
+        f_lxRow(0, "SMC ICT Observer", "QUAN SÁT • không chỉ dẫn giao dịch", color.white)
+        f_lxRow(1, "H1 / H4 đã đóng", (standardChart and h1Request == "60" ? f_direction(h1Bias) : "N/A") + " / " + (standardChart and h4Request == "240" ? f_direction(h4Bias) : "N/A"), lxContextConflict ? color.orange : color.white)
+        f_lxRow(2, "D1 / W1 đã đóng", (standardChart and dayRequest == "D" ? f_direction(dBias) : "N/A") + " / " + (standardChart and weekRequest == "W" ? f_direction(wBias) : "N/A"), color.silver)
+        f_lxRow(3, "Chart internal / swing", f_direction(lxInternal.bias) + " / " + f_direction(lxSwing.bias), color.white)
+        f_lxRow(4, "Vị trí giá đã chốt", lxLocation, color.silver)
+        f_lxRow(5, "Vùng HTF gần nhất", lxNearby, color.white)
+        f_lxRow(6, "Pool dưới / trên", f_price(lxNearestBelow) + " / " + f_price(lxNearestAbove), color.silver)
+        f_lxRow(7, "Sự kiện gần nhất", lxLastEvent + (na(lxLastEventAt) ? "" : " • " + str.format_time(lxLastEventAt, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN"), color.white)
+        f_lxRow(8, "Phiên địa phương", lxSession + " • không lọc", color.silver)
+        f_lxRow(9, "Nhận định", standardChart ? lxAssessment : "Cần chart nến giá tiêu chuẩn", standardChart ? color.white : color.orange)
+        f_lxRow(10, "Điểm cần thận trọng", lxConflict, color.orange)
+        f_lxRow(11, "Cần quan sát tiếp", lxWatch, color.white)
+        f_lxRow(12, "Nến chart đã chốt", na(lxObservedAt) ? "Chưa có" : str.format_time(lxObservedAt, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN • nhận định theo quy tắc", color.silver)
+
+lxUpperPlot = plot(lxShowRange and standardChart and not na(lxEquilibrium) ? lxRangeHigh : na, "Biên swing trên", color.new(color.orange, 75), style = plot.style_stepline)
+lxMiddlePlot = plot(lxShowRange and standardChart ? lxEquilibrium : na, "Equilibrium swing", color.new(color.gray, 50), style = plot.style_stepline)
+lxLowerPlot = plot(lxShowRange and standardChart and not na(lxEquilibrium) ? lxRangeLow : na, "Biên swing dưới", color.new(color.teal, 75), style = plot.style_stepline)
+fill(lxUpperPlot, lxMiddlePlot, color.new(color.orange, 96), title = "Premium")
+fill(lxMiddlePlot, lxLowerPlot, color.new(color.teal, 96), title = "Discount")
+plot(lxShowPrevious and dayRequest == "D" and standardChart ? lxPreviousDayHigh : na, "PDH", color.new(color.orange, 30), style = plot.style_stepline)
+plot(lxShowPrevious and dayRequest == "D" and standardChart ? lxPreviousDayLow : na, "PDL", color.new(color.teal, 30), style = plot.style_stepline)
+plot(lxShowPrevious and weekRequest == "W" and standardChart ? lxPreviousWeekHigh : na, "PWH", color.new(color.orange, 65), style = plot.style_stepline)
+plot(lxShowPrevious and weekRequest == "W" and standardChart ? lxPreviousWeekLow : na, "PWL", color.new(color.teal, 65), style = plot.style_stepline)
+bgcolor(lxShowSessions and standardChart and (lxNewYork or lxLondon or lxTokyo) ? color.new(lxNewYork ? color.blue : lxLondon ? color.purple : lxTokyo ? color.gray : color.white, 96) : na, title = "Giờ phiên tham chiếu")
+plot(lxInternalBreak, "Audit internal break", display = display.data_window)
+plot(lxSwingBreak, "Audit swing break", display = display.data_window)
+plot(lxSweepMask, "Audit sweep mask", display = display.data_window)
+plot(lxEqualMask, "Audit equal mask", display = display.data_window)
+plot(array.size(lxRegions), "Audit chart region count", display = display.data_window)
+plot(array.size(lxPools), "Audit chart pool count", display = display.data_window)
+plot(ltfAtr, "Audit ATR14", display = display.data_window, precision = 8)
+plot(BUILD_TOKEN, "Audit build token", display = display.data_window, precision = 0)

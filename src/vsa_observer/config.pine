@@ -1,0 +1,55 @@
+//@version=6
+// Presentation adapted from open-source LuxAlgo scripts, © LuxAlgo.
+// CC BY-NC-SA 4.0: https://creativecommons.org/licenses/by-nc-sa/4.0/
+// Changes: Vietnamese observer context, closed-bar engine, bounded drawing slots.
+// Sources, pinned hashes and adapted sections: docs/VSA_OBSERVER_LUX_UI_SOURCES.json
+indicator("VSA Observer v3 RC • Cấu trúc & bối cảnh", "VSA OBS v3", overlay = true, behind_chart = false, max_labels_count = 250, max_lines_count = 500, max_boxes_count = 300, max_bars_back = 600)
+// Observation derivative of the user's XAU-VSA attachment, 2026-11-17.
+string obsMode = input.string("Present", "Mode", options = ["Present", "Historical"], group = "Smart Money Concepts", tooltip = "Present: cấu trúc gần nhất mỗi hướng. Historical: lịch sử đến giới hạn hiển thị. Chỉ thay cách vẽ, không thay dữ liệu tính toán.", display = display.none)
+string obsStyle = input.string("Colored", "Style", options = ["Colored", "Monochrome"], group = "Smart Money Concepts", display = display.none)
+bool showMarketStructure = input.bool(true, "Swing / BOS / CHoCH", group = "Market Structure", inline = "structure", display = display.none)
+int obsStructureLimit = input.int(12, "Lịch sử", minval = 2, maxval = 40, group = "Market Structure", inline = "structure", display = display.none)
+color obsBullInput = input.color(#089981, "Bullish", group = "Market Structure", inline = "structureColor", display = display.none)
+color obsBearInput = input.color(#f23645, "Bearish", group = "Market Structure", inline = "structureColor", display = display.none)
+string chartFont = input.string("Nhỏ", "Label Size", options = ["Rất nhỏ", "Nhỏ", "Vừa"], group = "Market Structure", display = display.none)
+bool showInducement = input.bool(false, "Pivot hồi IDM (heuristic)", group = "Market Structure", display = display.none)
+bool showLiquidity = input.bool(true, "Pool thanh khoản", group = "Liquidity", inline = "liquidity", display = display.none)
+int smcLiquidityDisplayLimit = input.int(2, "Số mức", minval = 1, maxval = 8, group = "Liquidity", inline = "liquidity", display = display.none)
+bool showVsaEvents = input.bool(true, "Quét thanh khoản", group = "Liquidity", inline = "sweeps", display = display.none)
+int eventLimit = input.int(4, "Số nhãn", minval = 2, maxval = 120, group = "Liquidity", inline = "sweeps", display = display.none)
+bool showOrderBlocks = input.bool(true, "Order block", group = "Order Blocks", inline = "ob", display = display.none)
+int smcObDisplayLimit = input.int(2, "Số vùng", minval = 1, maxval = 5, group = "Order Blocks", inline = "ob", display = display.none)
+color obsObBull = input.color(color.new(#3179f5, 80), "Bullish", group = "Order Blocks", inline = "obColor", display = display.none)
+color obsObBear = input.color(color.new(#f77c80, 80), "Bearish", group = "Order Blocks", inline = "obColor", display = display.none)
+bool showFvg = input.bool(true, "FVG", group = "Fair Value Gaps", inline = "fvg", display = display.none)
+int smcFvgDisplayLimit = input.int(2, "Số vùng", minval = 1, maxval = 5, group = "Fair Value Gaps", inline = "fvg", display = display.none)
+color obsFvgBull = input.color(color.new(#00e676, 85), "Bullish", group = "Fair Value Gaps", inline = "fvgColor", display = display.none)
+color obsFvgBear = input.color(color.new(#ff5252, 85), "Bearish", group = "Fair Value Gaps", inline = "fvgColor", display = display.none)
+bool obsExtendZones = input.bool(true, "Extend vùng sang phải", group = "Zone Style", display = display.none)
+bool obsShowMid = input.bool(true, "Đường giữa vùng 50%", group = "Zone Style", tooltip = "Trung điểm hình học của OB/FVG, không phải mức vào lệnh.", display = display.none)
+bool showZoneLabels = input.bool(true, "Tên vùng / mức", group = "Zone Style", display = display.none)
+bool showZoneQuality = input.bool(false, "Độ rộng vùng / ATR", group = "Zone Style", display = display.none)
+bool showOnlyActiveZones = input.bool(true, "Chỉ hiện vùng chưa chạm / pool chưa quét", group = "Zone Style", display = display.none)
+bool showInspector = input.bool(true, "Show Dashboard", group = "Dashboard", display = display.none)
+string panelPosition = input.string("Giữa trái", "Location", options = ["Giữa trái", "Trên phải", "Dưới phải", "Dưới trái"], group = "Dashboard", tooltip = "Giữa trái tránh nhãn giá ở mép phải và tên symbol ở phía trên khi cửa sổ hẹp.", display = display.none)
+string panelFont = input.string("Nhỏ", "Size", options = ["Rất nhỏ", "Nhỏ", "Vừa"], group = "Dashboard", display = display.none)
+bool showEma = input.bool(false, "EMA tham chiếu", group = "VSA / Reference", inline = "ema", display = display.none)
+int ema200Length = input.int(200, "Chu kỳ", minval = 50, maxval = 500, group = "VSA / Reference", inline = "ema", display = display.none)
+bool showCloudContext = input.bool(false, "Dải EMA 8/21 ± 0.5 ATR của lõi gốc", group = "VSA / Reference", display = display.none)
+bool showVsaDetails = input.bool(false, "Thêm nhãn VSA", group = "VSA / Reference", display = display.none)
+bool colorVsaBars = input.bool(false, "Tô nến có mẫu VSA", group = "VSA / Reference", display = display.none)
+bool enableContextAlerts = input.bool(false, "Cảnh báo sự kiện khi đóng nến", group = "Alerts", display = display.none)
+string obsChartSize = chartFont == "Vừa" ? size.normal : chartFont == "Nhỏ" ? size.small : size.tiny
+bool obsDark = color.r(chart.bg_color) + color.g(chart.bg_color) + color.b(chart.bg_color) < 384
+color obsUp = obsStyle == "Monochrome" ? #b2b5be : obsBullInput
+color obsDown = obsStyle == "Monochrome" ? #5d606b : obsBearInput
+color obsAttention = obsDark ? #ffb74d : #b26a00
+// The classifier preserves the original mutually-exclusive bar-pattern thresholds.
+f_obs_vsa(bool valid, float rv, float rr, float loc, float delta, bool belowBoth) =>
+    not valid ? 99 : rv >= 1.5 and rr >= 1.2 and delta > 0 and loc >= 0.7 ? 1 : rv >= 1.5 and rr >= 1.2 and delta < 0 and loc <= 0.3 ? -1 : rv >= 1.5 and rr <= 0.8 and loc >= 0.65 ? 2 : rv >= 1.5 and rr <= 0.8 and loc <= 0.35 ? -2 : rv <= 0.7 and rr <= 0.8 and belowBoth and delta < 0 and loc >= 0.5 ? 3 : rv <= 0.7 and rr <= 0.8 and belowBoth and delta > 0 and loc <= 0.5 ? -3 : 0
+f_obs_expired(int age, int ttl) =>
+    age > ttl
+f_obs_candle_direction(float o, float c) =>
+    math.sign(c - o)
+f_obs_label_above(int sweep, int vsa) =>
+    sweep != 0 ? sweep == -1 or sweep == 2 : vsa < 0

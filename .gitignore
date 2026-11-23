@@ -1,0 +1,37 @@
+# Private data, credentials and generated local artifacts.
+.env
+.env.*
+*.pem
+*.key
+api-key.txt
+private-key.txt
+connection.json
+*credentials*
+*Cookies*
+*Login Data*
+*.sqlite*
+*.db
+*.db-*
+*.csv
+*.parquet
+*.bi5
+*.jsonl
+*.log
+*.zip
+*.7z
+*.pyc
+__pycache__/
+.pytest_cache/
+.venv/
+node_modules/
+runtime/
+.runtime/
+.playwright-cli/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+/data/
+/archive/
+/output/
+# dist/ is intentionally tracked: complete Pine scripts and build manifests.

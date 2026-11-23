@@ -1,0 +1,31 @@
+{
+  "status": "OBSERVATION_ONLY_EXPERIMENTAL",
+  "inputs": {
+    "src/lux_custom/config.pine": "c98ce8dba450fbab27457dfcab385d4db2ff4ad4dc0f459b1e7fb009cdf6394e",
+    "src/intraday/context.pine": "e9650baa09b2b0a267609cc89d32e656fc9b8fd6d5811a215ddf39109296e01d",
+    "src/intraday/zones.pine": "5400aa3e3d266d7bacbf67adacd2fd4100ed547d69abef6400ae5efb17a7469f",
+    "src/lux_custom/structure.pine": "32d16d7fc9558f7ce39c302535933cb879e3779a16a7e7b629fb76e5e47748f5",
+    "src/lux_custom/regions.pine": "3f91a90019d2627e51c348823d4fb942ca90760d80907e847f3134c02d307208",
+    "src/lux_custom/assessment.pine": "13283493da4bd3fa45bbb303110356c9e74c1f1924275d8d526e7892008cddc3",
+    "src/lux_custom/ui.pine": "c1e346ea39253643f4f063ed7cba7298a1dbabe8bf1280b46a62032d48faa8fa"
+  },
+  "build_token": 64157540051458,
+  "source_fingerprint": "3a59d7626a02d2d83141e276aae73395f38880f8257cf36ab5de6bb39907b5c2",
+  "output": "dist/lux_custom/SMC_ICT_OBSERVER.pine",
+  "sha256": "5b5dfcb788360bfae69fb52d9202262bdebf01a6d1b5cfd09359437722d1dee1",
+  "lines": 522,
+  "license": "CC-BY-NC-SA-4.0",
+  "native_compile": "SEE_HASH_PINNED_VALIDATION",
+  "native_runtime": "SEE_HASH_PINNED_VALIDATION",
+  "validation_evidence": "evidence/lux_custom/native-20261116.json",
+  "fragment_slices": {
+    "src/intraday/zones.pine": "Before f_contact; zone ingestion only"
+  },
+  "chart_timeframes": [
+    "5",
+    "15",
+    "60",
+    "240"
+  ],
+  "entry_engine_included": false
+}

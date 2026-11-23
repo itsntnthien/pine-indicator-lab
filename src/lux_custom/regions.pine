@@ -1,0 +1,47 @@
+// LuxAlgo FVG / inverse FVG / OB-breaker concepts, rewritten as one bounded lifecycle.
+var array<LxRegion> lxRegions = array.new<LxRegion>()
+
+f_lxAddRegion(string kind, int side, float lo, float hi, int anchor) =>
+    if side != 0 and not na(lo) and not na(hi) and hi > lo
+        string identity = kind + ":" + str.tostring(side) + ":" + str.tostring(anchor) + ":" + str.tostring(time_close)
+        array.push(lxRegions, LxRegion.new(identity, kind, side, lo, hi, anchor, bar_index, bar_index))
+    0
+
+int lxInversionCount = 0
+if barstate.isconfirmed and standardChart
+    int i = array.size(lxRegions) - 1
+    while i >= 0
+        LxRegion region = array.get(lxRegions, i)
+        bool remove = bar_index - region.born >= LX_TTL
+        if not remove and bar_index > region.available
+            bool invalid = region.side == 1 ? close < region.lo : close > region.hi
+            bool touched = high >= region.lo and low <= region.hi
+            bool filled = region.side == 1 ? low <= region.lo : high >= region.hi
+            if invalid
+                if region.kind == "FVG" or region.kind == "OB"
+                    region.kind := region.kind == "FVG" ? "IFVG" : "BRK"
+                    region.side := -region.side
+                    region.available := bar_index
+                    region.stage := 0
+                    lxInversionCount += 1
+                else
+                    remove := true
+            else if touched
+                region.stage := filled ? 2 : math.max(region.stage, 1)
+        if remove
+            array.remove(lxRegions, i)
+        i -= 1
+    if not na(ltfAtr) and ltfAtr > 0
+        float minGap = math.max(tick, 0.1 * ltfAtr)
+        if low - high[2] >= minGap and close[1] > high[2]
+            f_lxAddRegion("FVG", 1, high[2], low, time[1])
+        if low[2] - high >= minGap and close[1] < low[2]
+            f_lxAddRegion("FVG", -1, high, low[2], time[1])
+        if lxSwingBreak != 0
+            for k = 1 to 10
+                bool opposite = lxSwingBreak == 1 ? close[k] < open[k] : close[k] > open[k]
+                if opposite
+                    f_lxAddRegion("OB", lxSwingBreak, low[k], high[k], time[k])
+                    break
+    while array.size(lxRegions) > LX_REGION_LIMIT
+        array.shift(lxRegions)

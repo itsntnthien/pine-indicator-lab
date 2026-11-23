@@ -1,0 +1,111 @@
+// Fixed observation contract: reversal after a sweep, valid through age 10 inclusive.
+int SETUP_MAX_AGE = 10
+type SweepRecord
+    int bar = na
+    int stamp = na
+    float level = na
+    float extreme = na
+    bool invalid = false
+    bool structure = false
+    bool pending = false
+    int break_ticks = na
+
+method update(SweepRecord this, int side, float level, float extreme, int bar, int stamp, float candleClose) =>
+    if not na(level)
+        this.bar := bar
+        this.stamp := stamp
+        this.level := level
+        this.extreme := extreme
+        this.invalid := false
+        this.structure := false
+        this.pending := false
+        this.break_ticks := na
+    else if not na(this.bar)
+        this.invalid := this.invalid or (side == 1 ? f_to_ticks(candleClose, syminfo.mintick) < f_to_ticks(this.extreme, syminfo.mintick) : f_to_ticks(candleClose, syminfo.mintick) > f_to_ticks(this.extreme, syminfo.mintick))
+    this.invalid
+
+method age(SweepRecord this, int bar) =>
+    na(this.bar) ? -1 : bar - this.bar
+
+f_setup_structure(int side, int trend, int eventType, int eventTime, int sweepTime) =>
+    not na(sweepTime) and not na(eventTime) and eventTime > sweepTime and trend == side and math.sign(eventType) == side
+
+method confirmStructure(SweepRecord this, int side, int bar, int stamp, int trend, int eventType, int eventTime, int eventTicks, float candleClose) =>
+    int age = this.age(bar)
+    bool freshEvent = eventTime == stamp and math.sign(eventType) == side and trend == side
+    if age < 0 or age > SETUP_MAX_AGE or this.invalid or trend != side
+        this.structure := false
+        this.pending := false
+    else
+        if this.pending and age == 1
+            int closing = f_to_ticks(candleClose, syminfo.mintick)
+            this.structure := side == 1 ? closing > this.break_ticks : closing < this.break_ticks
+            this.pending := false
+        if freshEvent and age == 0
+            this.pending := true
+            this.break_ticks := eventTicks
+            this.structure := false
+        else if freshEvent and f_setup_structure(side, trend, eventType, eventTime, this.stamp)
+            this.structure := true
+            this.pending := false
+    this.structure
+
+// Additive flags keep every blocking reason available to the dashboard and audit.
+f_setup_mask(int age, bool invalid, bool oppositeRecent, bool structure, bool htf, bool vsa, bool extended, bool dataReady) =>
+    (dataReady ? 0 : 1) + (age < 0 ? 2 : 0) + (age > SETUP_MAX_AGE ? 4 : 0) + (invalid ? 8 : 0) + (oppositeRecent ? 16 : 0) + (structure ? 0 : 32) + (htf ? 0 : 64) + (vsa ? 0 : 128) + (extended ? 256 : 0)
+f_setup_has(int mask, int flag) =>
+    int(math.floor(mask / flag)) % 2 == 1
+// Stage is independent of the optional evidence; invalidation remains latched.
+f_setup_phase(int mask) =>
+    f_setup_has(mask, 8) ? 5 : f_setup_has(mask, 4) ? 6 : f_setup_has(mask, 2) ? 0 : f_setup_has(mask, 16) ? 4 : f_setup_has(mask, 32) ? 1 : mask == 0 ? 3 : 2
+f_setup_phase_text(int phase) =>
+    phase == 5 ? "Đã vô hiệu" : phase == 6 ? "Quét đã hết hạn" : phase == 4 ? "Quét hai phía · chờ" : phase == 3 ? "Điều kiện hội tụ" : phase == 2 ? "Cấu trúc xác nhận" : phase == 1 ? "Đã quét · chờ cấu trúc" : "Chưa ghi nhận quét"
+f_setup_zone(int side, float price, float atr) =>
+    float bestDistance = na
+    int bestId = na
+    string kind = ""
+    bool touched = false
+    int bestLow = na
+    int bestHigh = na
+    for z in smcFvgs
+        if not z.terminal and z.side == side
+            float distance = math.max(z.bottom_ticks * syminfo.mintick - price, math.max(price - z.top_ticks * syminfo.mintick, 0.0))
+            if na(bestDistance) or distance < bestDistance or (distance == bestDistance and z.creation_sequence_id > bestId)
+                bestDistance := distance
+                bestId := z.creation_sequence_id
+                kind := "FVG"
+                touched := z.mitigated
+                bestLow := z.bottom_ticks
+                bestHigh := z.top_ticks
+    for z in smcObs
+        if not z.terminal and z.side == side
+            float distance = math.max(z.bottom_ticks * syminfo.mintick - price, math.max(price - z.top_ticks * syminfo.mintick, 0.0))
+            if na(bestDistance) or distance < bestDistance or (distance == bestDistance and z.creation_sequence_id > bestId)
+                bestDistance := distance
+                bestId := z.creation_sequence_id
+                kind := "OB"
+                touched := z.mitigated
+                bestLow := z.bottom_ticks
+                bestHigh := z.top_ticks
+    int location = na(bestDistance) or na(atr) or atr <= 0 ? 0 : bestDistance == 0 ? 1 : bestDistance <= 0.5 * atr ? 2 : 3
+    string description = location == 0 ? "Chưa có vùng" : (location == 1 ? "Trong " : location == 2 ? "Gần " : "Xa ") + kind + (touched ? " · đã chạm" : " · chưa chạm")
+    if location != 0
+        description += " #" + str.tostring(bestId) + "\n" + f_c08_price_text(bestLow) + " – " + f_c08_price_text(bestHigh)
+        description += (kind == "FVG" ? not showFvg : not showOrderBlocks) ? " · đang ẩn" : "\nDấu ◇ trên chart: vùng bảng tham chiếu."
+    [description, location, bestId, bestDistance]
+f_setup_status(int mask) =>
+    f_setup_has(mask, 8) ? "VÔ HIỆU" : f_setup_has(mask, 4) ? "HẾT HẠN" : f_setup_has(mask, 1) ? "THIẾU DỮ LIỆU" : f_setup_has(mask, 2) ? "CHƯA CÓ QUÉT" : f_setup_has(mask, 16) ? "HAI PHÍA / CHỜ" : mask == 0 ? "ĐỦ TIÊU CHÍ" : "CHỜ XÁC NHẬN"
+f_setup_reason(int mask) =>
+    f_setup_has(mask, 8) ? "Đóng vượt cực trị quét\nChờ một lần quét mới" : f_setup_has(mask, 4) ? "Quét đã quá 10 nến\nChờ một lần quét mới" : f_setup_has(mask, 1) ? "Thiếu volume / ATR\nChưa đánh giá đủ" : f_setup_has(mask, 2) ? "Chưa có quét được xác nhận" : f_setup_has(mask, 16) ? "Hai phía cùng có quét gần\nBối cảnh chưa rõ" : f_setup_has(mask, 32) ? "Chờ BOS/CHoCH thuận\nsau lần quét" : f_setup_has(mask, 64) ? "Chờ hai nến HTF\ncùng thuận hướng" : f_setup_has(mask, 128) ? "Chờ mẫu VSA thuận\ntrên nến đã đóng" : f_setup_has(mask, 256) ? "Giá xa EMA > 2.5 ATR\nTránh đánh giá khi đuổi giá" : "Quét + cấu trúc xác nhận\nHTF và VSA cùng thuận"
+f_setup_reasons(int mask) =>
+    string reasons = ""
+    reasons += f_setup_has(mask, 1) ? "• Thiếu dữ liệu volume / ATR / warmup\n" : ""
+    reasons += f_setup_has(mask, 2) ? "• Chưa ghi nhận quét ở phía này\n" : ""
+    reasons += f_setup_has(mask, 4) ? "• Quét quá 10 nến\n" : ""
+    reasons += f_setup_has(mask, 8) ? "• Đã có nến đóng vượt cực trị quét\n" : ""
+    reasons += f_setup_has(mask, 16) ? "• Phía đối diện cũng có quét còn hiệu lực\n" : ""
+    reasons += f_setup_has(mask, 32) ? "• Chưa có BOS/CHoCH thuận sau quét\n" : ""
+    reasons += f_setup_has(mask, 64) ? "• Hai thân nến HTF chưa cùng thuận / thiếu HTF\n" : ""
+    reasons += f_setup_has(mask, 128) ? "• VSA nến chốt chưa ủng hộ\n" : ""
+    reasons += f_setup_has(mask, 256) ? "• Khoảng cách EMA vượt 2.5 ATR\n" : ""
+    mask == 0 ? "Tất cả tiêu chí quan sát đạt. Chưa đánh giá spread, fill hoặc lợi nhuận." : reasons

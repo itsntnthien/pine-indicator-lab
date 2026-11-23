@@ -1,0 +1,349 @@
+{
+  "date": "2026-11-23",
+  "selection": "Pine indicators only; Python is build/reference/test tooling. Explicit allowlist, source hashes before documentation edits.",
+  "files": [
+    {
+      "path": "src/intraday/config.pine",
+      "source_sha256": "6be27ff43327589d165964d9e99581174bfd24c699f24d7f5d5a0c6256414a19"
+    },
+    {
+      "path": "src/intraday/context.pine",
+      "source_sha256": "e9650baa09b2b0a267609cc89d32e656fc9b8fd6d5811a215ddf39109296e01d"
+    },
+    {
+      "path": "src/intraday/reference.py",
+      "source_sha256": "541bbc15d7c7a0a79b3b589df82903fa1feb087d2718ad8fc51f84840bba464e"
+    },
+    {
+      "path": "src/intraday/setup.pine",
+      "source_sha256": "ec16c7979f996e3e7e260bde07798a0eb7f08150bec1dd54b093226c7802b5d6"
+    },
+    {
+      "path": "src/intraday/ui.pine",
+      "source_sha256": "566dcb2281676262e306de0cb1d9ca2014a8c147c01371f06239bd5617d34fdd"
+    },
+    {
+      "path": "src/intraday/zones.pine",
+      "source_sha256": "5400aa3e3d266d7bacbf67adacd2fd4100ed547d69abef6400ae5efb17a7469f"
+    },
+    {
+      "path": "src/lux_custom/assessment.pine",
+      "source_sha256": "13283493da4bd3fa45bbb303110356c9e74c1f1924275d8d526e7892008cddc3"
+    },
+    {
+      "path": "src/lux_custom/config.pine",
+      "source_sha256": "c98ce8dba450fbab27457dfcab385d4db2ff4ad4dc0f459b1e7fb009cdf6394e"
+    },
+    {
+      "path": "src/lux_custom/reference.py",
+      "source_sha256": "a2d61b0bef0145074d2eedfb4e87d9d740cc2934c17c4e613104ebd1fed25896"
+    },
+    {
+      "path": "src/lux_custom/regions.pine",
+      "source_sha256": "3f91a90019d2627e51c348823d4fb942ca90760d80907e847f3134c02d307208"
+    },
+    {
+      "path": "src/lux_custom/structure.pine",
+      "source_sha256": "32d16d7fc9558f7ce39c302535933cb879e3779a16a7e7b629fb76e5e47748f5"
+    },
+    {
+      "path": "src/lux_custom/ui.pine",
+      "source_sha256": "c1e346ea39253643f4f063ed7cba7298a1dbabe8bf1280b46a62032d48faa8fa"
+    },
+    {
+      "path": "src/vsa_observer/config.pine",
+      "source_sha256": "8dcf885833d79576d23f1f6205c34fee1b6669e861d30c11c3670f6bfe05d7d5"
+    },
+    {
+      "path": "src/vsa_observer/core.pine",
+      "source_sha256": "4c86032ef88bd124016e31c9ea5701a089e25188c8fa662ef05df8c55929540a"
+    },
+    {
+      "path": "src/vsa_observer/reference.py",
+      "source_sha256": "af9f5fdc2ef1de14af1bc286ea31608d7e5db21362d5e5ade61a55b7f5c6e535"
+    },
+    {
+      "path": "src/vsa_observer/render.pine",
+      "source_sha256": "e5b79f6d4db206862c1f7d4c260eeb850b0c61d57909f1291021f4d68bc4a64f"
+    },
+    {
+      "path": "src/vsa_observer/setup.pine",
+      "source_sha256": "0592e0989be5f15408797ea43f36fbc79ae2872c7408d2e8556c06ddeb8dd700"
+    },
+    {
+      "path": "src/vsa_observer/ui.pine",
+      "source_sha256": "0478f3368ac3d28f077e8170a7711ac715e8b5238aa17243067b1f6476ac7fdc"
+    },
+    {
+      "path": "tests/test_intraday.py",
+      "source_sha256": "72f8d07d1836747260b8fcdfbb0ae30ea4631e6385196f31ddf6ba9e8cd47b18"
+    },
+    {
+      "path": "tests/test_intraday_logs.py",
+      "source_sha256": "94319fa529760a1a8e86351ac926811efa6c3844b8e76c845efe1f78919a9f11"
+    },
+    {
+      "path": "tests/test_intraday_parity.py",
+      "source_sha256": "9615096b96fd8740767469998e7d2bcc8c82ba869738649e0105b3724c71c798"
+    },
+    {
+      "path": "tests/test_lux_custom.py",
+      "source_sha256": "dedb5759bfe2d48e3b1b149f3b8ebcfcf95a7b584b6de5690d93b47481965e9f"
+    },
+    {
+      "path": "tests/test_lux_native.py",
+      "source_sha256": "1eb886c64d534b9c09034d7377dd33977a836df603c9adf12df2250d24f82e9b"
+    },
+    {
+      "path": "tests/test_vsa_observer.py",
+      "source_sha256": "d2451d995c6fbde4cb5bc5c82c82174fc40190322a7851d812b767938e9b55c2"
+    },
+    {
+      "path": "tests/test_vsa_v2.py",
+      "source_sha256": "49ca91d896ae6abf4ed8a997c76dbc2c5385e85d711523897c1428e14142d442"
+    },
+    {
+      "path": "tests/test_vsa_v3.py",
+      "source_sha256": "da7323b50e0a4b7f9550b77515981f441d14104c07a81844651f7284b794eea5"
+    },
+    {
+      "path": "tests/test_vsa_v3_research.py",
+      "source_sha256": "271d1ee8eb0d21cf005b734593ea5f080c03bb6353373b11d58187fbda6928ff"
+    },
+    {
+      "path": "tests/vsa_observer_native.pine",
+      "source_sha256": "20b405caa76510d084d1ffe81c6c8af511f04a575783d025bb7b4d8d8a432a6c"
+    },
+    {
+      "path": "tests/vsa_observer_practical_audit.pine",
+      "source_sha256": "cc27e6239e185b2000ba915c01d55697850ea587307c13d08cf4fcee3413a141"
+    },
+    {
+      "path": "tests/vsa_observer_setup_native.pine",
+      "source_sha256": "22d62edb4c3f6d70c1dd527d5ca4f84b5df028669af6d9dcc0b9bf48c11a02e3"
+    },
+    {
+      "path": "tools/build_intraday.py",
+      "source_sha256": "ca9540c3b77ea4149a96a2063c56790f885ed9059edf183f33c20f002f9d4564"
+    },
+    {
+      "path": "tools/build_lux_custom.py",
+      "source_sha256": "de79e4a3f6fe770072d0dd9b4bf9ce3698128573423b55ecf98cf4874a395576"
+    },
+    {
+      "path": "tools/build_vsa_observer.py",
+      "source_sha256": "91039b6d4439d38e0dc0c5191367ce7e847eedc72b8112a2c551d277346e6221"
+    },
+    {
+      "path": "tools/build_lux_audit.py",
+      "source_sha256": "d7df5da68dec9f4fdfb0ca1f478b645fbdbedcdc8951ebfe3e672244bb14f1be"
+    },
+    {
+      "path": "tools/build_vsa_v2_parity.py",
+      "source_sha256": "98f2f4b228ab71071f62f5527d32de292cb65894c1792ced3bd953e4a18b4daf"
+    },
+    {
+      "path": "tools/build_vsa_v3_parity.py",
+      "source_sha256": "493b14ec787389c3f68b47b98169c6d05fe35bc845ee9c46911dfc10857d5efe"
+    },
+    {
+      "path": "tools/check_intraday_logs.py",
+      "source_sha256": "6a155976175d0aa3450d974b5c211c07922a4b84831a63d064ea2801fcacfff9"
+    },
+    {
+      "path": "tools/check_intraday_parity.py",
+      "source_sha256": "2103e85c87392b4cef536977374dcee05c4a33c89a5c1ff639ff536d42dc80e8"
+    },
+    {
+      "path": "tools/check_lux_native.py",
+      "source_sha256": "77b53a728627b15e17904cd60e59465ba207a6326b1c35260651d8c7ebd44edb"
+    },
+    {
+      "path": "tools/check_vsa_v3_mutations.py",
+      "source_sha256": "6e9649688d891b382f71d02b3ea4e6dc24d85cd9ab8b8fea6c956e4e31c76d63"
+    },
+    {
+      "path": "tools/research_vsa_v2.py",
+      "source_sha256": "d974b166fed75cba0beb99f4ecee32bee1fda968fd86f064b57dc19705eb3885"
+    },
+    {
+      "path": "tools/research_vsa_v3.py",
+      "source_sha256": "be669f001bbc75f183d8fa4ef1a34b007b90a56f7581f3e83e24215c573c3681"
+    },
+    {
+      "path": "references/workspace/TradingView/SMC-PRO-XAUUSD/calibration/pivot/engine/features.py",
+      "source_sha256": "718753a1ce87f8fc22b9b2949707a4f7eeea866b0df1bf00b34b48a80ae20e78"
+    },
+    {
+      "path": "references/workspace/TradingView/SMC-PRO-XAUUSD/calibration/pivot/engine/types.py",
+      "source_sha256": "cd22510d703d56c78ca8716ccbf0edd4ed38c3ade8835f2801d9384b9cd4b559"
+    },
+    {
+      "path": "docs/INTRADAY_V1.md",
+      "source_sha256": "df820c31b3d1bf594e9a5e8b77796bafa739e1b6f970ab7e2dfd006eeb052de7"
+    },
+    {
+      "path": "docs/LUX_CUSTOM_OBSERVER.md",
+      "source_sha256": "1eb89e73bfc5e37d7a2facdf4547455dacc509a845953a9f93bbe1e53eb006d8"
+    },
+    {
+      "path": "docs/LUX_CUSTOM_ATTRIBUTION.json",
+      "source_sha256": "407599fb97e4032485cbcaf353d2b5adc7a958f3fb17e22c327e0a021b63e995"
+    },
+    {
+      "path": "docs/VSA_OBSERVER_V3.md",
+      "source_sha256": "32c5fdb8ee5b5301b6be8ca10ede1e1c88bbef32a6a9629d9d3c3c72cb5643c8"
+    },
+    {
+      "path": "docs/VSA_OBSERVER_LUX_UI_SOURCES.json",
+      "source_sha256": "bd8a3257a6f6fb17d4fe778c6918b8047171313049f73b81d27330477d5dc516"
+    },
+    {
+      "path": "research/vsa-observer-20261117/original.pine",
+      "source_sha256": "ab2c1b04ce2eb5c914356fa6b965ecb62b55460c868666f6fb202af9b533fa86"
+    },
+    {
+      "path": "research/vsa-observer-20261117/provenance.json",
+      "source_sha256": "5f0a6b8988ab2de170b6774168027b06b235264273da590df5fc72aad7c79c08"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/manifest.json",
+      "source_sha256": "7da21ec66bf46bb318fdb2486defad3445813a6cde63cffdc0c06db1c85e94bb"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/src/vsa_observer/config.pine",
+      "source_sha256": "9181ee4ddc68d7be90936462e1a6e749cb19ed1c67d5dd49c2c45e6e4f5cfd08"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/src/vsa_observer/core.pine",
+      "source_sha256": "f0a84804bf36a6482e6f689a1c70fcce4d76002a2ce84c8f7cddd05644186fc0"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/src/vsa_observer/reference.py",
+      "source_sha256": "513fa1e357a43ee892bdfeebee7e632a9f2fee6452eeeefa2452aa6b0005cb96"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/src/vsa_observer/render.pine",
+      "source_sha256": "3da41f93375384aecc670333edccf87893f47c50477611553f0fdf971fdfaf5c"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/src/vsa_observer/setup.pine",
+      "source_sha256": "7add068c33b6554c069e6285a92dfaba8431e5c7eae8b3b355acf798bfbbe0cd"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/src/vsa_observer/ui.pine",
+      "source_sha256": "28b2c93335906f2346b323b261aa717aa60d5653c68ba1e8f05906c52adb2df5"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/dist/vsa_observer/XAU_VSA_OBSERVER.pine",
+      "source_sha256": "78b389c46aba4164437605c5f8230c460062ebff76eb6f8ea98455203555a316"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/dist/vsa_observer/XAU_VSA_OBSERVER.build.json",
+      "source_sha256": "34ab8515961ac99e2908c2ccf9ad9ffafadfaaf4fa7d2c8fa493b80e503722e6"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/tools/build_vsa_observer.py",
+      "source_sha256": "c2e512c335cfce7c0938b6f1ea41803265ba319d28732ad8047187f48ced0224"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/tools/build_vsa_v2_parity.py",
+      "source_sha256": "0dc986fe47dc5810389d173e2270fb65423330fa1255de0821aad3a822e7b81d"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/tests/test_vsa_observer.py",
+      "source_sha256": "59f946aaf4f21197d513206a2c12d912770dc0a166b0cacaf6c222019f3e10a3"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/tests/test_vsa_v2.py",
+      "source_sha256": "97e90c86cdda43ba27d7208e41865f00f822a6b9b8cc8df405364510b761f465"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/tests/vsa_observer_native.pine",
+      "source_sha256": "e5dac4e5e83ad9a9cf3cb8cb121fe92e6f1700bdc4c5824991a4a166070d648d"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/tests/vsa_observer_practical_audit.pine",
+      "source_sha256": "cc27e6239e185b2000ba915c01d55697850ea587307c13d08cf4fcee3413a141"
+    },
+    {
+      "path": "research/vsa-v3-20261119/baseline/tests/vsa_observer_setup_native.pine",
+      "source_sha256": "69774f26daa6e66737989ffc71957b5bad1fc6a45f30efa41da706255ea941c0"
+    },
+    {
+      "path": "dist/vsa_observer/XAU_VSA_OBSERVER.pine",
+      "source_sha256": "78b389c46aba4164437605c5f8230c460062ebff76eb6f8ea98455203555a316"
+    },
+    {
+      "path": "dist/vsa_observer/XAU_VSA_OBSERVER.build.json",
+      "source_sha256": "34ab8515961ac99e2908c2ccf9ad9ffafadfaaf4fa7d2c8fa493b80e503722e6"
+    },
+    {
+      "path": "evidence/vsa_observer/v3-lux-system-acceptance.json",
+      "source_sha256": "9916fb76faceeda18b4bc8c862ed1f615d7aa144e3bd42c9330a8c37730b6fe6"
+    },
+    {
+      "path": "evidence/vsa_observer/v3-mutations.json",
+      "source_sha256": "b8584a383a40d98a7ad0a49f9ee37bb678d36e7f20aec4827ca6baebdce30342"
+    },
+    {
+      "path": "evidence/lux_custom/native-20261116.json",
+      "source_sha256": "517b054056855ec21b68003238f619e565c36d9003a2710d3610c9e12415cba0"
+    },
+    {
+      "path": "tools/indicator_readiness.py",
+      "source_sha256": "3f9314ba92a8d3045e3295037033a6e73f2bf05b4714773f5b2661daecd41225"
+    },
+    {
+      "path": "tools/check_lux_custom.py",
+      "source_sha256": "33559d476d928189755ae3528dd79306a8af74e251f0bd234c4d4461fd9d68b1"
+    },
+    {
+      "path": "tools/check_intraday_legacy.py",
+      "source_sha256": "200a9d19df3f8e16bef7da7e9671b96c2787dc197e665b64217a764d0b09b7f4"
+    },
+    {
+      "path": "tests/test_indicator_readiness.py",
+      "source_sha256": "5de73d2fc4080e2ce81f55399f54b1edd8749fbb6550de1aa35b767911ae4862"
+    },
+    {
+      "path": "references/workspace/TradingView/SMC-PRO-XAUUSD/calibration/pivot/data/resampler.py",
+      "source_sha256": "7dcd702ec2692dce00db8e87fb9ba1051ed0da898477a825cfb5bbe8b89b961f"
+    },
+    {
+      "path": "references/workspace/TradingView/SMC-PRO-XAUUSD/calibration/pivot/domain/models.py",
+      "source_sha256": "bfe6c971d5379c6a2b21d4e35d196b4ec3c30a32739e793a02be6c0a7d384eea"
+    },
+    {
+      "path": "references/workspace/TradingView/SMC-PRO-XAUUSD/calibration/pivot/domain/enums.py",
+      "source_sha256": "b8fa3447974f08eabbac3f9a340693b8545246009ee4587c55d9da3c58164e4d"
+    },
+    {
+      "path": "docs/INTRADAY_VALIDATION_20261115.md",
+      "source_sha256": "939f5f1ffee3f5dd7f6303bd7d574ea2bcecd5839b4017bd40d94c539f5d77d8"
+    },
+    {
+      "path": "docs/LUX_CUSTOM_VALIDATION_20261116.md",
+      "source_sha256": "e4950be017b57d41bf5ba077040940c9eb14b7accb09871c67524a79df763496"
+    },
+    {
+      "path": "docs/VSA_OBSERVER_V3_E2E.md",
+      "source_sha256": "ceb1f0a8e28434ae0a4159c05bc0110ba96f4d59ffd48b3cdcbc96562744c8c0"
+    }
+  ],
+  "excluded": [
+    "Git history",
+    "credentials",
+    "market data",
+    "runtime databases",
+    "browser profiles",
+    "external repository clones",
+    "migration archives",
+    "raw session logs",
+    "local account configuration",
+    "node_modules",
+    "virtual environments",
+    "Chart Workspace application",
+    "Local Terminal application"
+  ]
+}

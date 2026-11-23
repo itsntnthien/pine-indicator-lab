@@ -1,0 +1,26 @@
+{
+  "status": "EXPERIMENTAL_NOT_TRADING_CERTIFIED",
+  "built_utc": "2026-11-23T06:24:17.018908+00:00",
+  "inputs": {
+    "src/intraday/config.pine": "6be27ff43327589d165964d9e99581174bfd24c699f24d7f5d5a0c6256414a19",
+    "src/intraday/context.pine": "e9650baa09b2b0a267609cc89d32e656fc9b8fd6d5811a215ddf39109296e01d",
+    "src/intraday/zones.pine": "5400aa3e3d266d7bacbf67adacd2fd4100ed547d69abef6400ae5efb17a7469f",
+    "src/intraday/setup.pine": "ec16c7979f996e3e7e260bde07798a0eb7f08150bec1dd54b093226c7802b5d6",
+    "src/intraday/ui.pine": "566dcb2281676262e306de0cb1d9ca2014a8c147c01371f06239bd5617d34fdd"
+  },
+  "build_token": 158879367533117,
+  "source_fingerprint": "907ffc43923d0854e8d33aaccf28a899cf00c094a1e285618cdf2e21c61eac34",
+  "output": "dist/intraday/ICT_INTRADAY_EXPERIMENTAL.pine",
+  "sha256": "6a86470dad0992b87502b973b462fc0e9a9e8822de3896bda11128993232d2dc",
+  "native_compile": "NOT_RUN",
+  "native_runtime": "NOT_RUN",
+  "native_parity": "NOT_RUN",
+  "feeds": [
+    "OANDA:XAUUSD",
+    "FOREXCOM:NAS100"
+  ],
+  "entry_pairs": {
+    "5": "60",
+    "15": "240"
+  }
+}

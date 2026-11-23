@@ -1,0 +1,14 @@
+{
+  "sha256": "78b389c46aba4164437605c5f8230c460062ebff76eb6f8ea98455203555a316",
+  "lines": 1215,
+  "inputs": {
+    "src/vsa_observer/config.pine": "9181ee4ddc68d7be90936462e1a6e749cb19ed1c67d5dd49c2c45e6e4f5cfd08",
+    "src/vsa_observer/core.pine": "f0a84804bf36a6482e6f689a1c70fcce4d76002a2ce84c8f7cddd05644186fc0",
+    "src/vsa_observer/setup.pine": "7add068c33b6554c069e6285a92dfaba8431e5c7eae8b3b355acf798bfbbe0cd",
+    "src/vsa_observer/render.pine": "3da41f93375384aecc670333edccf87893f47c50477611553f0fdf971fdfaf5c",
+    "src/vsa_observer/ui.pine": "28b2c93335906f2346b323b261aa717aa60d5653c68ba1e8f05906c52adb2df5"
+  },
+  "provenance": "research/vsa-observer-20261117/provenance.json",
+  "mode": "OBSERVATION_ONLY",
+  "validation": "evidence/vsa_observer/v2-acceptance.json"
+}

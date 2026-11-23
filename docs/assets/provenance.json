@@ -1,0 +1,14 @@
+[
+  {
+    "image": "smc-observer.jpg",
+    "original_path": "output/playwright/lux-observer-20261116/observer-final.jpg",
+    "sha256": "41a678a4f8afba4178a22365a87fb1bf27c02e1289f4ad4f74642c8929ca11cb",
+    "scope": "Historical TradingView screenshot, not a new native run"
+  },
+  {
+    "image": "vsa-observer.png",
+    "original_path": "output/playwright/vsa-v3-lux-ui/production-xau-default.png",
+    "sha256": "5ba9c94431e6dc88f1cdbc548f3c6a5d781144f4c363d6719851478e0b37673f",
+    "scope": "Historical TradingView screenshot, not a new native run"
+  }
+]

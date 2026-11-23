@@ -1,0 +1,102 @@
+{
+  "derivative": "SMC ICT Observer",
+  "date": "2026-11-15",
+  "license": "CC-BY-NC-SA-4.0",
+  "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+  "affiliation": "Independent research derivative, not an official LuxAlgo product",
+  "sources": [
+    {
+      "author": "LuxAlgo",
+      "id": "EuXueiJN",
+      "title": "Pure Price Action Structures [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/EuXueiJN-Pure-Price-Action-Structures-LuxAlgo/",
+      "version": "1",
+      "sha256": "3028dbb8da0c9a8fe286d8c8f83fc9f75985ae57f127703f3fcc185f30307014",
+      "license": "CC-BY-NC-SA-4.0",
+      "original": "research/luxalgo-smc-ict-20261114/sources/EuXueiJN-Pure-Price-Action-Structures-LuxAlgo/source.pine",
+      "custom_modules": "structure.pine",
+      "changes": "Trạng thái pivot/crossed/bias; pivot strict-left/non-strict-right; thêm INIT, chỉ phá pivot đã khả dụng trước nến hiện tại."
+    },
+    {
+      "author": "LuxAlgo",
+      "id": "JRqryeJ5",
+      "title": "Liquidity Sweeps [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/JRqryeJ5-Liquidity-Sweeps-LuxAlgo/",
+      "version": "1",
+      "sha256": "18be09f34ebf371e4cc8997ba77c29cc1ada4612a5529a79994694ec9b6ba12d",
+      "license": "CC-BY-NC-SA-4.0",
+      "original": "research/luxalgo-smc-ict-20261114/sources/JRqryeJ5-Liquidity-Sweeps-LuxAlgo/source.pine",
+      "custom_modules": "structure.pine",
+      "changes": "Wick vượt mức rồi close lấy lại; ngưỡng ít nhất một tick; ghi riêng sweep hai phía; không coi breakout/retest là cùng sự kiện."
+    },
+    {
+      "author": "LuxAlgo",
+      "id": "8FHucjY6",
+      "title": "Inversion Fair Value Gaps (IFVG) [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/8FHucjY6-Inversion-Fair-Value-Gaps-IFVG-LuxAlgo/",
+      "version": "1",
+      "sha256": "6b969a1e80719f73bfdfa1ec790da17d3e12c273429f57f4bb7ecbe1088a5323",
+      "license": "CC-BY-NC-SA-4.0",
+      "original": "research/luxalgo-smc-ict-20261114/sources/8FHucjY6-Inversion-Fair-Value-Gaps-IFVG-LuxAlgo/source.pine",
+      "custom_modules": "regions.pine",
+      "changes": "Tham khảo ý tưởng FVG đảo vai; dùng close qua biên xa thay điều kiện body nguồn; chỉ đảo một lần, không reset TTL và không tạo tín hiệu retest."
+    },
+    {
+      "author": "LuxAlgo",
+      "id": "ib4uqBJx",
+      "title": "ICT Concepts [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/ib4uqBJx-ICT-Concepts-LuxAlgo/",
+      "version": "1",
+      "sha256": "a000fe76c60e89d6b782b2d67aeae426ad373379033ec259fa908dffba6bd452",
+      "license": "CC-BY-NC-SA-4.0",
+      "original": "research/luxalgo-smc-ict-20261114/sources/ib4uqBJx-ICT-Concepts-LuxAlgo/source.pine",
+      "custom_modules": "assessment.pine",
+      "changes": "Phiên theo timezone IANA; giờ tham chiếu Tokyo09-18/London08-17/NY08-17 tự xử lý DST; không port killzone hay setup ICT."
+    },
+    {
+      "author": "LuxAlgo",
+      "id": "piIbWMpY",
+      "title": "Order Blocks & Breaker Blocks [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/piIbWMpY-Order-Blocks-Breaker-Blocks-LuxAlgo/",
+      "version": "1",
+      "sha256": "563f7c9f3415f2d5b2cfbdf4cc5f1c86ef18d964a924a0152dbabf62af6a5885",
+      "license": "CC-BY-NC-SA-4.0",
+      "original": "research/luxalgo-smc-ict-20261114/sources/piIbWMpY-Order-Blocks-Breaker-Blocks-LuxAlgo/source.pine",
+      "custom_modules": "regions.pine",
+      "changes": "OB và breaker là lớp vùng; chọn nến ngược gần nhất trong 10 nến trước break swing; full wick; close xuyên đảo vai, không port thuật toán chọn cực trị hoặc vòng lặp mảng nguồn."
+    },
+    {
+      "author": "LuxAlgo",
+      "id": "CnB3fSph",
+      "title": "Smart Money Concepts (SMC) [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/CnB3fSph-Smart-Money-Concepts-SMC-LuxAlgo/",
+      "version": "7",
+      "sha256": "880717919e24049e19271cc41ba408b93d4dd4e556034b6d837084593db6275a",
+      "license": "CC-BY-NC-SA-4.0",
+      "original": "research/luxalgo-smc-ict-20261114/sources/CnB3fSph-Smart-Money-Concepts-SMC-LuxAlgo/source.pine",
+      "custom_modules": "structure.pine,ui.pine",
+      "changes": "Tách internal/swing, EQH/EQL và premium/discount; bỏ entry/confluence; thay pivot 2/2 và 5/5, chỉ chốt sự kiện khi nến đóng; không dùng HTF FVG lookahead chưa offset."
+    },
+    {
+      "author": "LuxAlgo",
+      "id": "jWY4Uiez",
+      "title": "Fair Value Gap [LuxAlgo]",
+      "url": "https://www.tradingview.com/script/jWY4Uiez-Fair-Value-Gap-LuxAlgo/",
+      "version": "4",
+      "sha256": "0c844884dca450281e79c4a2ac8adedc423b6024cb7f2476c3332169f7688875",
+      "license": "CC-BY-NC-SA-4.0",
+      "original": "research/luxalgo-smc-ict-20261114/sources/jWY4Uiez-Fair-Value-Gap-LuxAlgo/source.pine",
+      "custom_modules": "regions.pine",
+      "changes": "FVG ba nến có điều kiện close nến giữa; ngưỡng max(tick,0.1 ATR); tách chạm, lấp wick và close xuyên."
+    }
+  ],
+  "workspace_reuse": {
+    "src/intraday/context.pine": "e9650baa09b2b0a267609cc89d32e656fc9b8fd6d5811a215ddf39109296e01d",
+    "src/intraday/zones.pine": "5400aa3e3d266d7bacbf67adacd2fd4100ed547d69abef6400ae5efb17a7469f"
+  },
+  "workspace_scope": "Context and zone ingestion only; no setup/target engine",
+  "excluded_license_families": [
+    "MPL-2.0 sources not integrated",
+    "CHECK_HEADER source not integrated"
+  ]
+}

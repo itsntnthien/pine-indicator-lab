@@ -1,0 +1,78 @@
+// This function runs in each requested timeframe. All returned fields are offset together.
+f_context() =>
+    float a = ta.atr(ATR_LENGTH)
+    bool ph = not na(high[4]) and high[2] > high[3] and high[2] > high[4] and high[2] >= high[1] and high[2] >= high
+    bool pl = not na(low[4]) and low[2] < low[3] and low[2] < low[4] and low[2] <= low[1] and low[2] <= low
+    var float lastHigh = na
+    var float lastLow = na
+    var int highIdentity = na
+    var int lowIdentity = na
+    var int brokenHigh = na
+    var int brokenLow = na
+    var int bias = 0
+    bool up = not na(lastHigh) and close > lastHigh and (na(brokenHigh) or brokenHigh != highIdentity)
+    bool down = not na(lastLow) and close < lastLow and (na(brokenLow) or brokenLow != lowIdentity)
+    int breakSide = up and not down ? 1 : down and not up ? -1 : 0
+    if up and down
+        bias := 0
+    else if breakSide != 0
+        bias := breakSide
+    if up
+        brokenHigh := highIdentity
+    if down
+        brokenLow := lowIdentity
+    float obLo = na
+    float obHi = na
+    if breakSide != 0 and not na(a) and a > 0
+        for k = 1 to 10
+            bool opposite = breakSide == 1 ? close[k] < open[k] : close[k] > open[k]
+            if opposite
+                obLo := low[k]
+                obHi := high[k]
+                break
+    float pivotHigh = ph and not na(a) and a > 0 ? high[2] : na
+    float pivotLow = pl and not na(a) and a > 0 ? low[2] : na
+    // A new pivot cannot be broken before its confirmation was available.
+    if ph
+        lastHigh := high[2]
+        highIdentity := time[2]
+    if pl
+        lastLow := low[2]
+        lowIdentity := time[2]
+    float minGap = math.max(FVG_ATR * a, syminfo.mintick)
+    int fvgSide = not na(a) and a > 0 ? (low - high[2] >= minGap ? 1 : low[2] - high >= minGap ? -1 : 0) : 0
+    float fvgLo = fvgSide == 1 ? high[2] : fvgSide == -1 ? high : na
+    float fvgHi = fvgSide == 1 ? low : fvgSide == -1 ? low[2] : na
+    int sdSide = 0
+    float sdLo = na
+    float sdHi = na
+    float baseLow = na
+    float baseHigh = na
+    bool compact = true
+    if not na(a[1]) and a[1] > 0 and math.abs(close - open) >= a[1]
+        for k = 1 to 3
+            float span = high[k] - low[k]
+            compact := compact and not na(span) and span > 0 and math.abs(close[k] - open[k]) <= span * 0.5
+            baseLow := na(baseLow) ? low[k] : math.min(baseLow, low[k])
+            baseHigh := na(baseHigh) ? high[k] : math.max(baseHigh, high[k])
+            if compact and baseHigh - baseLow <= a[1]
+                int departure = close > baseHigh and close > open ? 1 : close < baseLow and close < open ? -1 : 0
+                if departure != 0
+                    sdSide := departure
+                    sdLo := baseLow
+                    sdHi := baseHigh
+    [time[1], time_close[1], bar_index[1], close[1], a[1], bias[1], pivotHigh[1], pivotLow[1], time[3], breakSide[1], obLo[1], obHi[1], fvgSide[1], fvgLo[1], fvgHi[1], sdSide[1], sdLo[1], sdHi[1]]
+
+// Never request lower-timeframe context and mislabel it as confirmed HTF.
+string h1Request = timeframe.in_seconds() <= 3600 ? "60" : timeframe.period
+string h4Request = timeframe.in_seconds() <= 14400 ? "240" : timeframe.period
+string dayRequest = timeframe.in_seconds() <= 86400 ? "D" : timeframe.period
+string weekRequest = timeframe.in_seconds() <= 604800 ? "W" : timeframe.period
+[h1Time, h1CloseTime, h1Index, h1Close, h1Atr, h1Bias, h1Ph, h1Pl, h1Anchor, h1ObDir, h1ObLo, h1ObHi, h1FvgDir, h1FvgLo, h1FvgHi, h1SdDir, h1SdLo, h1SdHi] = request.security(syminfo.tickerid, h1Request, f_context(), lookahead = barmerge.lookahead_on)
+[h4Time, h4CloseTime, h4Index, h4Close, h4Atr, h4Bias, h4Ph, h4Pl, h4Anchor, h4ObDir, h4ObLo, h4ObHi, h4FvgDir, h4FvgLo, h4FvgHi, h4SdDir, h4SdLo, h4SdHi] = request.security(syminfo.tickerid, h4Request, f_context(), lookahead = barmerge.lookahead_on)
+[dTime, dCloseTime, dIndex, dClose, dAtr, dBias, dPh, dPl, dAnchor, dObDir, dObLo, dObHi, dFvgDir, dFvgLo, dFvgHi, dSdDir, dSdLo, dSdHi] = request.security(syminfo.tickerid, dayRequest, f_context(), lookahead = barmerge.lookahead_on)
+[wTime, wCloseTime, wIndex, wClose, wAtr, wBias, wPh, wPl, wAnchor, wObDir, wObLo, wObHi, wFvgDir, wFvgLo, wFvgHi, wSdDir, wSdLo, wSdHi] = request.security(syminfo.tickerid, weekRequest, f_context(), lookahead = barmerge.lookahead_on)
+float ltfAtr = ta.atr(ATR_LENGTH)
+int activeBias = nz(activeTf == "60" ? h1Bias : h4Bias, 0)
+int otherBias = nz(activeTf == "60" ? h4Bias : h1Bias, 0)
+bool contextConflict = activeBias != 0 and otherBias != 0 and activeBias != otherBias

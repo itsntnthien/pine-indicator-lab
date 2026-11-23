@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="330" viewBox="0 0 1200 330" role="img" aria-labelledby="title desc">
+<title id="title">Pine Indicator Lab</title><desc id="desc">TradingView indicators for market structure, liquidity and volume context.</desc>
+<defs><linearGradient id="bg" x2="1" y2="1"><stop stop-color="#0b1426"/><stop offset="1" stop-color="#152a3d"/></linearGradient><linearGradient id="line"><stop stop-color="#38bdf8"/><stop offset="1" stop-color="#52e0b0"/></linearGradient><pattern id="grid" width="44" height="44" patternUnits="userSpaceOnUse"><path d="M44 0H0V44" fill="none" stroke="#8cb8ca" stroke-opacity=".08"/></pattern></defs>
+<rect width="1200" height="330" rx="20" fill="url(#bg)"/><rect x="720" width="480" height="330" rx="20" fill="url(#grid)"/>
+<rect x="52" y="44" width="5" height="24" rx="2" fill="#52e0b0"/><text x="73" y="63" fill="#8ca7bc" font-family="Segoe UI,Arial,sans-serif" font-size="15" letter-spacing="3">TRADINGVIEW / PINE SCRIPT v6</text>
+<text x="50" y="145" fill="#f2f7fc" font-family="Segoe UI,Arial,sans-serif" font-size="57" font-weight="700" letter-spacing="-1">Pine Indicator Lab</text>
+<text x="53" y="185" fill="#9fb5c8" font-family="Segoe UI,Arial,sans-serif" font-size="20">Structure. Context. Confirmation.</text>
+<g font-family="Segoe UI,Arial,sans-serif" font-size="13" font-weight="600"><rect x="52" y="229" width="123" height="34" rx="17" fill="#20334a"/><text x="72" y="251" fill="#a9c8ef">ICT INTRADAY</text><rect x="188" y="229" width="144" height="34" rx="17" fill="#173d40"/><text x="209" y="251" fill="#70e1c0">SMC OBSERVER</text><rect x="345" y="229" width="143" height="34" rx="17" fill="#3b3540"/><text x="366" y="251" fill="#e9c27f">VSA OBSERVER</text></g>
+<rect x="800" y="145" width="306" height="47" rx="3" fill="#52e0b0" opacity=".08"/><path d="M796 146H1112" stroke="#52e0b0" stroke-dasharray="5 7" opacity=".6"/>
+<path d="M763 251L800 234L834 246L869 194L902 212L936 156L970 177L1004 106L1038 132L1072 85L1111 101" fill="none" stroke="url(#line)" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+<g stroke="#52e0b0" stroke-width="2"><path d="M869 172V218M936 133V181M1004 83V134M1072 61V111"/><rect x="862" y="184" width="14" height="19" fill="#52e0b0"/><rect x="929" y="146" width="14" height="21" fill="#52e0b0"/><rect x="997" y="96" width="14" height="24" fill="#52e0b0"/><rect x="1065" y="74" width="14" height="22" fill="#52e0b0"/></g>
+<g stroke="#e9ad89" stroke-width="2"><path d="M902 181V234M970 145V199M1038 100V154"/><rect x="895" y="193" width="14" height="25" fill="#e9ad89"/><rect x="963" y="159" width="14" height="24" fill="#e9ad89"/><rect x="1031" y="114" width="14" height="25" fill="#e9ad89"/></g>
+<text x="812" y="285" fill="#748fa5" font-family="Segoe UI,Arial,sans-serif" font-size="11" letter-spacing="2">MODULAR SOURCE / VERIFIED BUILDS</text>
+</svg>

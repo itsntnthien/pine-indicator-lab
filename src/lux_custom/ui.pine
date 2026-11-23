@@ -1,0 +1,90 @@
+var array<box> lxDrawings = array.new<box>()
+var array<line> lxPoolDrawings = array.new<line>()
+var table lxPanel = table.new(position.top_right, 2, 13, bgcolor = color.new(color.black, 15), border_width = 1)
+
+f_lxRow(int row, string heading, string value, color ink) =>
+    table.cell(lxPanel, 0, row, heading, text_color = color.silver, text_size = size.small, text_halign = text.align_left)
+    table.cell(lxPanel, 1, row, value, text_color = ink, text_size = size.small, text_halign = text.align_left)
+
+if barstate.islast
+    while array.size(lxDrawings) > 0
+        box.delete(array.pop(lxDrawings))
+    while array.size(lxPoolDrawings) > 0
+        line.delete(array.pop(lxPoolDrawings))
+    int edge = time + int(timeframe.in_seconds() * 1000)
+    if standardChart
+        bool activeAvailable = activeTf == "60" ? h1Request == "60" : h4Request == "240"
+        if showZones and activeAvailable
+            array<float> distances = array.new<float>()
+            for zone in activeZones
+                array.push(distances, math.max(math.max(zone.lo - close, close - zone.hi), 0))
+            array<int> order = array.sort_indices(distances)
+            int shown = 0
+            for index in order
+                if shown < visibleGroups
+                    Zone zone = array.get(activeZones, index)
+                    color ink = zone.side == 1 ? color.teal : color.orange
+                    string caption = (activeTf == "60" ? "H1 " : "H4 ") + zone.kind
+                    array.push(lxDrawings, box.new(zone.available, zone.hi, edge, zone.lo, xloc = xloc.bar_time, bgcolor = color.new(ink, 90), border_color = color.new(ink, 50), text = caption, text_color = ink, text_size = size.tiny, text_halign = text.align_right))
+                    shown += 1
+        if lxShowRegions
+            array<float> distances = array.new<float>()
+            for region in lxRegions
+                array.push(distances, math.max(math.max(region.lo - close, close - region.hi), 0))
+            array<int> order = array.sort_indices(distances)
+            int shown = 0
+            for index in order
+                if shown < 8
+                    LxRegion region = array.get(lxRegions, index)
+                    color ink = region.side == 1 ? color.aqua : color.fuchsia
+                    string stage = region.stage == 0 ? "mới" : region.stage == 1 ? "đã chạm" : "đã lấp bằng wick"
+                    string caption = "Chart " + region.kind + " • " + stage
+                    // Start at confirmation, not at the historical origin candle.
+                    int offset = bar_index - region.available
+                    array.push(lxDrawings, box.new(time[offset], region.hi, edge, region.lo, xloc = xloc.bar_time, bgcolor = color.new(ink, 94), border_color = color.new(ink, 65), border_style = line.style_dotted, text = caption, text_color = ink, text_size = size.tiny, text_halign = text.align_left))
+                    shown += 1
+        if lxShowStructure
+            array<float> distances = array.new<float>()
+            for pool in lxPools
+                array.push(distances, math.abs(pool.level - close))
+            array<int> order = array.sort_indices(distances)
+            int shown = 0
+            for index in order
+                if shown < 8
+                    LxPool pool = array.get(lxPools, index)
+                    array.push(lxPoolDrawings, line.new(pool.anchor, pool.level, edge, pool.level, xloc = xloc.bar_time, color = color.new(pool.side == 1 ? color.teal : color.orange, 45), style = pool.equalLevel ? line.style_dashed : line.style_dotted))
+                    shown += 1
+    table.clear(lxPanel, 0, 0, 1, 12)
+    if showPanel
+        f_lxRow(0, "SMC ICT Observer", "QUAN SÁT • không chỉ dẫn giao dịch", color.white)
+        f_lxRow(1, "H1 / H4 đã đóng", (standardChart and h1Request == "60" ? f_direction(h1Bias) : "N/A") + " / " + (standardChart and h4Request == "240" ? f_direction(h4Bias) : "N/A"), lxContextConflict ? color.orange : color.white)
+        f_lxRow(2, "D1 / W1 đã đóng", (standardChart and dayRequest == "D" ? f_direction(dBias) : "N/A") + " / " + (standardChart and weekRequest == "W" ? f_direction(wBias) : "N/A"), color.silver)
+        f_lxRow(3, "Chart internal / swing", f_direction(lxInternal.bias) + " / " + f_direction(lxSwing.bias), color.white)
+        f_lxRow(4, "Vị trí giá đã chốt", lxLocation, color.silver)
+        f_lxRow(5, "Vùng HTF gần nhất", lxNearby, color.white)
+        f_lxRow(6, "Pool dưới / trên", f_price(lxNearestBelow) + " / " + f_price(lxNearestAbove), color.silver)
+        f_lxRow(7, "Sự kiện gần nhất", lxLastEvent + (na(lxLastEventAt) ? "" : " • " + str.format_time(lxLastEventAt, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN"), color.white)
+        f_lxRow(8, "Phiên địa phương", lxSession + " • không lọc", color.silver)
+        f_lxRow(9, "Nhận định", standardChart ? lxAssessment : "Cần chart nến giá tiêu chuẩn", standardChart ? color.white : color.orange)
+        f_lxRow(10, "Điểm cần thận trọng", lxConflict, color.orange)
+        f_lxRow(11, "Cần quan sát tiếp", lxWatch, color.white)
+        f_lxRow(12, "Nến chart đã chốt", na(lxObservedAt) ? "Chưa có" : str.format_time(lxObservedAt, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN • nhận định theo quy tắc", color.silver)
+
+lxUpperPlot = plot(lxShowRange and standardChart and not na(lxEquilibrium) ? lxRangeHigh : na, "Biên swing trên", color.new(color.orange, 75), style = plot.style_stepline)
+lxMiddlePlot = plot(lxShowRange and standardChart ? lxEquilibrium : na, "Equilibrium swing", color.new(color.gray, 50), style = plot.style_stepline)
+lxLowerPlot = plot(lxShowRange and standardChart and not na(lxEquilibrium) ? lxRangeLow : na, "Biên swing dưới", color.new(color.teal, 75), style = plot.style_stepline)
+fill(lxUpperPlot, lxMiddlePlot, color.new(color.orange, 96), title = "Premium")
+fill(lxMiddlePlot, lxLowerPlot, color.new(color.teal, 96), title = "Discount")
+plot(lxShowPrevious and dayRequest == "D" and standardChart ? lxPreviousDayHigh : na, "PDH", color.new(color.orange, 30), style = plot.style_stepline)
+plot(lxShowPrevious and dayRequest == "D" and standardChart ? lxPreviousDayLow : na, "PDL", color.new(color.teal, 30), style = plot.style_stepline)
+plot(lxShowPrevious and weekRequest == "W" and standardChart ? lxPreviousWeekHigh : na, "PWH", color.new(color.orange, 65), style = plot.style_stepline)
+plot(lxShowPrevious and weekRequest == "W" and standardChart ? lxPreviousWeekLow : na, "PWL", color.new(color.teal, 65), style = plot.style_stepline)
+bgcolor(lxShowSessions and standardChart and (lxNewYork or lxLondon or lxTokyo) ? color.new(lxNewYork ? color.blue : lxLondon ? color.purple : lxTokyo ? color.gray : color.white, 96) : na, title = "Giờ phiên tham chiếu")
+plot(lxInternalBreak, "Audit internal break", display = display.data_window)
+plot(lxSwingBreak, "Audit swing break", display = display.data_window)
+plot(lxSweepMask, "Audit sweep mask", display = display.data_window)
+plot(lxEqualMask, "Audit equal mask", display = display.data_window)
+plot(array.size(lxRegions), "Audit chart region count", display = display.data_window)
+plot(array.size(lxPools), "Audit chart pool count", display = display.data_window)
+plot(ltfAtr, "Audit ATR14", display = display.data_window, precision = 8)
+plot(BUILD_TOKEN, "Audit build token", display = display.data_window, precision = 0)

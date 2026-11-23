@@ -1,0 +1,49 @@
+// Test-only extension: run actual production functions on fixtures and each historical bar.
+var int witnessBars = 0
+var int witnessEvents = 0
+int witnessConfEnd = time_close(confTf)
+int witnessAnchorEnd = time_close(anchorTf)
+if barstate.isfirst
+    if f_obs_vsa(false, na, na, na, na, false) != 99 or f_obs_vsa(false, 0, 0.5, 0.8, -1, true) != 99
+        runtime.error("TEST: missing/zero volume must be unavailable")
+    if f_obs_vsa(true, 1.5, 1.2, 0.7, 1, false) != 1 or f_obs_vsa(true, 1.5, 1.2, 0.3, -1, false) != -1
+        runtime.error("TEST: wide high-volume boundary")
+    if f_obs_vsa(true, 1.5, 0.8, 0.65, 0, false) != 2 or f_obs_vsa(true, 1.5, 0.8, 0.35, 0, false) != -2
+        runtime.error("TEST: narrow high-volume boundary")
+    if f_obs_vsa(true, 0.7, 0.8, 0.5, -1, true) != 3 or f_obs_vsa(true, 0.7, 0.8, 0.5, 1, true) != -3
+        runtime.error("TEST: low-volume boundary")
+    if f_obs_vsa(true, 0.7, 0.8, 0.5, -1, false) != 0 or f_obs_vsa(true, 1.49, 1.2, 0.8, 1, false) != 0
+        runtime.error("TEST: nonqualifying cases")
+    if f_obs_candle_direction(100, 100) != 0 or f_obs_candle_direction(100, 101) != 1 or f_obs_candle_direction(100, 99) != -1
+        runtime.error("TEST: doji / candle direction")
+    if f_obs_expired(250, 250) or not f_obs_expired(251, 250)
+        runtime.error("TEST: TTL boundary")
+    if f_setup_phase(0) != 3 or f_setup_phase(128) != 2 or f_setup_phase(32) != 1 or f_setup_phase(2) != 0 or f_setup_phase(16) != 4 or f_setup_phase(36) != 6 or f_setup_phase(12) != 5
+        runtime.error("TEST: stage precedence")
+if barstate.isconfirmed
+    witnessBars += 1
+    int oldVsaCode = not vwValid ? 99 : vwDemand ? 1 : vwSupply ? -1 : vwAbsorbBuy ? 2 : vwAbsorbSell ? -2 : vwNoSupply ? 3 : vwNoDemand ? -3 : 0
+    if obsRawVsa != oldVsaCode
+        runtime.error("TEST: VSA classifier diverged from original patterns")
+    if smcCalculationTf and (obsVsa != obsRawVsa or obsTime != time_close)
+        runtime.error("TEST: snapshot not committed at bar close")
+    if not smcCalculationTf and (not na(obsTime) or array.size(obsLabels) > 0)
+        runtime.error("TEST: nonstandard chart produced observations")
+    if array.size(smcLiquidity) > LIQUIDITY_CAPACITY or array.size(smcFvgs) > FVG_CAPACITY or array.size(smcObs) > OB_CAPACITY or array.size(obsLabels) > eventLimit
+        runtime.error("TEST: unbounded collections")
+    for item in smcFvgs
+        if item.terminal or f_obs_expired(smcCanonicalBarIndex - item.creation_bar_index, SMC_FVG_MAX_AGE_BARS)
+            runtime.error("TEST: stale FVG survived")
+    for item in smcObs
+        if item.terminal or f_obs_expired(smcCanonicalBarIndex - item.creation_bar_index, SMC_OB_MAX_AGE_BARS)
+            runtime.error("TEST: stale OB survived")
+    if supportedTf and ((confCommittedValid and confLastCommittedEnd > time_close) or (anchorCommittedValid and anchorLastCommittedEnd > time_close))
+        runtime.error("TEST: future HTF bucket")
+    if supportedTf and time_close == witnessConfEnd and (not confCommittedValid or confLastCommittedEnd != time_close)
+        runtime.error("TEST: confirmation HTF delayed at simultaneous close")
+    if supportedTf and time_close == witnessAnchorEnd and (not anchorCommittedValid or anchorLastCommittedEnd != time_close)
+        runtime.error("TEST: anchor HTF delayed at simultaneous close")
+    if obsVsa != 0 and obsVsa != 99 and smcCalculationTf
+        witnessEvents += 1
+if barstate.islastconfirmedhistory
+    log.info("VSA_OBSERVER_NATIVE_PASS|" + syminfo.tickerid + "|" + timeframe.period + "|standard=" + str.tostring(chart.is_standard) + "|bars=" + str.tostring(witnessBars) + "|events=" + str.tostring(witnessEvents) + "|fixtures=15")

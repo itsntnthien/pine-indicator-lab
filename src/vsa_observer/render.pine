@@ -1,0 +1,260 @@
+f_smc_select_liquidity(array<Liquidity> zones, float price, float atr, int limit, bool activeOnly) =>
+    array<int> selected = array.new_int(0)
+    if limit > 0 and array.size(zones) > 0
+        for rank = 0 to limit - 1
+            bool found = false
+            int bestId = na
+            int bestCreated = na
+            int bestInactive = na
+            float bestDistance = na
+            for index = 0 to array.size(zones) - 1
+                Liquidity item = array.get(zones, index)
+                bool eligible = not item.terminal and (not activeOnly or not item.swept) and not array.includes(selected, item.creation_sequence_id)
+                if eligible
+                    float itemPrice = f_ticks_to_price(item.level_ticks, syminfo.mintick)
+                    float itemDistance = not na(price) ? math.abs(itemPrice - price) : 0.0
+                    itemDistance := not na(atr) and atr > 0 ? itemDistance / atr : itemDistance
+                    int itemInactive = item.swept ? 1 : 0
+                    bool better = not found
+                    if not better and itemInactive < bestInactive
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance < bestDistance
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index > bestCreated
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index == bestCreated and item.creation_sequence_id < bestId
+                        better := true
+                    if better
+                        found := true
+                        bestId := item.creation_sequence_id
+                        bestCreated := item.creation_bar_index
+                        bestInactive := itemInactive
+                        bestDistance := itemDistance
+            if found
+                array.push(selected, bestId)
+    selected
+
+f_smc_select_fvgs(array<FVG> zones, float price, float atr, int limit, bool activeOnly) =>
+    array<int> selected = array.new_int(0)
+    if limit > 0 and array.size(zones) > 0
+        for rank = 0 to limit - 1
+            bool found = false
+            int bestId = na
+            int bestCreated = na
+            int bestInactive = na
+            float bestDistance = na
+            for index = 0 to array.size(zones) - 1
+                FVG item = array.get(zones, index)
+                bool eligible = not item.terminal and (not activeOnly or not item.mitigated) and not array.includes(selected, item.creation_sequence_id)
+                if eligible
+                    float itemLow = f_ticks_to_price(item.bottom_ticks, syminfo.mintick)
+                    float itemHigh = f_ticks_to_price(item.top_ticks, syminfo.mintick)
+                    float itemDistance = not na(price) ? math.max(itemLow - price, math.max(price - itemHigh, 0.0)) : 0.0
+                    itemDistance := not na(atr) and atr > 0 ? itemDistance / atr : itemDistance
+                    int itemInactive = item.mitigated ? 1 : 0
+                    bool better = not found
+                    if not better and itemInactive < bestInactive
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance < bestDistance
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index > bestCreated
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index == bestCreated and item.creation_sequence_id < bestId
+                        better := true
+                    if better
+                        found := true
+                        bestId := item.creation_sequence_id
+                        bestCreated := item.creation_bar_index
+                        bestInactive := itemInactive
+                        bestDistance := itemDistance
+            if found
+                array.push(selected, bestId)
+    selected
+
+f_smc_select_obs(array<OrderBlock> zones, float price, float atr, int limit, bool activeOnly) =>
+    array<int> selected = array.new_int(0)
+    if limit > 0 and array.size(zones) > 0
+        for rank = 0 to limit - 1
+            bool found = false
+            int bestId = na
+            int bestCreated = na
+            int bestInactive = na
+            float bestDistance = na
+            for index = 0 to array.size(zones) - 1
+                OrderBlock item = array.get(zones, index)
+                bool eligible = not item.terminal and (not activeOnly or not item.mitigated) and not array.includes(selected, item.creation_sequence_id)
+                if eligible
+                    float itemLow = f_ticks_to_price(item.bottom_ticks, syminfo.mintick)
+                    float itemHigh = f_ticks_to_price(item.top_ticks, syminfo.mintick)
+                    float itemDistance = not na(price) ? math.max(itemLow - price, math.max(price - itemHigh, 0.0)) : 0.0
+                    itemDistance := not na(atr) and atr > 0 ? itemDistance / atr : itemDistance
+                    int itemInactive = item.mitigated ? 1 : 0
+                    bool better = not found
+                    if not better and itemInactive < bestInactive
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance < bestDistance
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index > bestCreated
+                        better := true
+                    else if not better and itemInactive == bestInactive and itemDistance == bestDistance and item.creation_bar_index == bestCreated and item.creation_sequence_id < bestId
+                        better := true
+                    if better
+                        found := true
+                        bestId := item.creation_sequence_id
+                        bestCreated := item.creation_bar_index
+                        bestInactive := itemInactive
+                        bestDistance := itemDistance
+            if found
+                array.push(selected, bestId)
+    selected
+
+// Slots persist across bars; setters preserve IDs and Pine rollback semantics.
+var array<line> obsLines = array.new<line>()
+var array<box> obsBoxes = array.new<box>()
+var array<label> obsStructureLabels = array.new<label>()
+var array<line> obsStructureLines = array.new<line>()
+var array<int> obsStructureStarts = array.new<int>()
+var array<StructuralEvent> obsStructureEvents = array.new<StructuralEvent>()
+var array<line> obsMidLines = array.new<line>()
+var array<label> obsLevelLabels = array.new<label>()
+var int obsRenderedBar = na
+// The break consumes the prior swing, even if a new pivot confirms on this bar.
+if obsClosed and smcLatestStructure.time == time
+    array.push(obsStructureStarts, smcLatestStructure.event_type > 0 ? c16c02SwingHighSourceTime[1] : c16c02SwingLowSourceTime[1])
+    array.push(obsStructureEvents, smcLatestStructure.copy())
+    if array.size(obsStructureStarts) > obsStructureLimit
+        array.shift(obsStructureStarts)
+        array.shift(obsStructureEvents)
+if barstate.isfirst
+    for slot = 0 to 10
+        array.push(obsLines, line.new(na, na, na, na, xloc = xloc.bar_time))
+        array.push(obsLevelLabels, label.new(na, na, "", xloc = xloc.bar_time, color = color(na), style = label.style_label_left))
+    for slot = 0 to 13
+        array.push(obsBoxes, box.new(na, na, na, na, xloc = xloc.bar_time, extend = extend.none))
+        array.push(obsMidLines, line.new(na, na, na, na, xloc = xloc.bar_time, style = line.style_dashed))
+    for slot = 0 to obsStructureLimit - 1
+        array.push(obsStructureLabels, label.new(na, na, "", xloc = xloc.bar_time))
+        array.push(obsStructureLines, line.new(na, na, na, na, xloc = xloc.bar_time, extend = extend.none))
+f_obs_line(int slot, int left, int ticks, color tone, string style, int width) =>
+    line object = array.get(obsLines, slot)
+    float price = f_ticks_to_price(ticks, syminfo.mintick)
+    line.set_xy1(object, left, price)
+    line.set_xy2(object, obsTime, price)
+    line.set_color(object, tone)
+    line.set_style(object, style)
+    line.set_width(object, width)
+    line.set_extend(object, extend.none)
+    int right = obsTime + int(timeframe.in_seconds() * 1000 * 8)
+    line.set_x2(object, right)
+    label tag = array.get(obsLevelLabels, slot)
+    // Liquidity labels take precedence over overlapping swing names.
+    label.set_xy(tag, left, showZoneLabels and (slot >= 2 or not showLiquidity) ? price : na)
+    label.set_style(tag, slot == 0 ? label.style_label_down : slot == 1 ? label.style_label_up : label.style_label_lower_left)
+    label.set_text(tag, slot == 0 ? "Swing High" : slot == 1 ? "Swing Low" : slot == 2 ? "IDM" : "Liquidity")
+    label.set_textcolor(tag, tone)
+    label.set_size(tag, obsChartSize)
+f_obs_box(int slot, int left, int top, int bottom, int id, int side, bool touched, string kind) =>
+    box object = array.get(obsBoxes, slot)
+    bool referenced = id == obsLongZoneId or id == obsShortZoneId
+    color fillTone = obsStyle == "Monochrome" ? color.new(side == 1 ? obsUp : obsDown, 85) : kind == "OB" ? (side == 1 ? obsObBull : obsObBear) : (side == 1 ? obsFvgBull : obsFvgBear)
+    color tone = color.new(fillTone, 0)
+    string widthText = showZoneQuality and obsAtr > 0 ? " / " + str.tostring((top - bottom) * syminfo.mintick / obsAtr, "#.##") + " ATR" : ""
+    string caption = showZoneLabels and (referenced or (top - bottom) * syminfo.mintick >= nz(obsAtr) * 0.2) ? kind : ""
+    if caption != ""
+        caption += (side == 1 ? " +" : " −") + (referenced ? " ·" : "") + (touched ? " chạm" : "") + widthText
+    box.set_lefttop(object, left, f_ticks_to_price(top, syminfo.mintick))
+    box.set_rightbottom(object, obsTime + int(timeframe.in_seconds() * 1000 * 8), f_ticks_to_price(bottom, syminfo.mintick))
+    box.set_extend(object, obsExtendZones ? extend.right : extend.none)
+    box.set_border_color(object, kind == "OB" ? color.new(tone, 70) : color(na))
+    box.set_border_width(object, 1)
+    box.set_border_style(object, line.style_solid)
+    box.set_bgcolor(object, touched ? color.new(tone, 93) : fillTone)
+    box.set_text(object, caption)
+    box.set_text_color(object, obsDark ? color.new(tone, 0) : color.new(chart.fg_color, 20))
+    box.set_text_size(object, obsChartSize)
+    box.set_text_halign(object, text.align_right)
+    box.set_text_valign(object, side == 1 ? text.align_bottom : text.align_top)
+    // LuxAlgo Order Block Detector: independent average line inside each box.
+    line mid = array.get(obsMidLines, slot)
+    float midPrice = (top + bottom) * syminfo.mintick * 0.5
+    line.set_xy1(mid, left, obsShowMid ? midPrice : na)
+    line.set_xy2(mid, obsTime + int(timeframe.in_seconds() * 1000 * 8), obsShowMid ? midPrice : na)
+    line.set_extend(mid, obsExtendZones ? extend.right : extend.none)
+    line.set_color(mid, color.new(#9598a1, 37))
+
+if (barstate.islastconfirmedhistory or barstate.islast) and (na(obsRenderedBar) or obsRenderedBar != smcCanonicalBarIndex)
+    array<int> poolIds = f_smc_select_liquidity(smcLiquidity, obsClose, obsAtr, showLiquidity ? smcLiquidityDisplayLimit : 0, showOnlyActiveZones)
+    array<int> fvgIds = f_smc_select_fvgs(smcFvgs, obsClose, obsAtr, showFvg ? smcFvgDisplayLimit : 0, showOnlyActiveZones)
+    array<int> obIds = f_smc_select_obs(smcObs, obsClose, obsAtr, showOrderBlocks ? smcObDisplayLimit : 0, showOnlyActiveZones)
+    // At most one referenced zone per side may bypass the untouched/display filter.
+    for z in smcFvgs
+        if showFvg and not z.terminal and (z.creation_sequence_id == obsLongZoneId or z.creation_sequence_id == obsShortZoneId) and not array.includes(fvgIds, z.creation_sequence_id)
+            array.push(fvgIds, z.creation_sequence_id)
+    for z in smcObs
+        if showOrderBlocks and not z.terminal and (z.creation_sequence_id == obsLongZoneId or z.creation_sequence_id == obsShortZoneId) and not array.includes(obIds, z.creation_sequence_id)
+            array.push(obIds, z.creation_sequence_id)
+    for object in obsLines
+        line.set_y1(object, na)
+        line.set_y2(object, na)
+    for object in obsMidLines
+        line.set_y1(object, na)
+        line.set_y2(object, na)
+    for object in obsLevelLabels
+        label.set_xy(object, na, na)
+    for object in obsBoxes
+        box.set_top(object, na)
+        box.set_bottom(object, na)
+        box.set_text(object, "")
+    if showMarketStructure
+        f_obs_line(0, c16c02SwingHighConfirmationTime, c16c02SwingHighTicks, color.new(obsDown, 45), line.style_dashed, 1)
+        f_obs_line(1, c16c02SwingLowConfirmationTime, c16c02SwingLowTicks, color.new(obsUp, 45), line.style_dashed, 1)
+        if showInducement
+            f_obs_line(2, smcLatestInducementTime, smcLatestInducementTicks, color.new(smcLatestInducementSide == 1 ? color.teal : color.red, 20), line.style_dotted, 1)
+    int poolSlot = 3
+    for z in smcLiquidity
+        if array.includes(poolIds, z.creation_sequence_id)
+            f_obs_line(poolSlot, z.creation_time, z.level_ticks, color.new(z.side == 1 ? obsUp : obsDown, z.swept ? 85 : 0), line.style_dotted, 1)
+            label.set_text(array.get(obsLevelLabels, poolSlot), z.side == 1 ? "Sellside liquidity" : "Buyside liquidity")
+            poolSlot += 1
+    int boxSlot = 0
+    for z in smcFvgs
+        if array.includes(fvgIds, z.creation_sequence_id)
+            f_obs_box(boxSlot, z.creation_time, z.top_ticks, z.bottom_ticks, z.creation_sequence_id, z.side, z.mitigated, "FVG")
+            boxSlot += 1
+    for z in smcObs
+        if array.includes(obIds, z.creation_sequence_id)
+            f_obs_box(boxSlot, z.creation_time, z.top_ticks, z.bottom_ticks, z.creation_sequence_id, z.side, z.mitigated, "OB")
+            boxSlot += 1
+    int lastBull = -1
+    int lastBear = -1
+    if array.size(obsStructureEvents) > 0
+        for index = 0 to array.size(obsStructureEvents) - 1
+            if array.get(obsStructureEvents, index).event_type > 0
+                lastBull := index
+            else
+                lastBear := index
+    for slot = 0 to obsStructureLimit - 1
+        label object = array.get(obsStructureLabels, slot)
+        line segment = array.get(obsStructureLines, slot)
+        label.set_xy(object, na, na)
+        line.set_xy1(segment, na, na)
+        line.set_xy2(segment, na, na)
+        if showMarketStructure and slot < array.size(obsStructureEvents) and (obsMode == "Historical" or slot == lastBull or slot == lastBear)
+            StructuralEvent event = array.get(obsStructureEvents, slot)
+            int origin = array.get(obsStructureStarts, slot)
+            float level = f_ticks_to_price(event.price_ticks, syminfo.mintick)
+            color tone = event.event_type > 0 ? obsUp : obsDown
+            string caption = math.abs(event.event_type) == 2 ? "CHoCH" : "BOS"
+            line.set_xy1(segment, origin, level)
+            line.set_xy2(segment, event.time, level)
+            line.set_color(segment, tone)
+            line.set_style(segment, line.style_solid)
+            line.set_width(segment, 1)
+            label.set_xy(object, int(math.avg(origin, event.time)), level)
+            label.set_text(object, caption)
+            label.set_style(object, event.event_type > 0 ? label.style_label_down : label.style_label_up)
+            label.set_color(object, color(na))
+            label.set_textcolor(object, tone)
+            label.set_size(object, obsChartSize)
+            label.set_tooltip(object, caption + " · đóng vượt " + f_c08_price_text(event.price_ticks) + "\nĐường nối pivot tới nến xác nhận; chỉ xuất hiện sau nến xác nhận.\nXác nhận: " + str.format_time(event.time, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN")
+    obsRenderedBar := smcCanonicalBarIndex

@@ -1,0 +1,58 @@
+// Append after production and both native test harnesses; diagnostic only.
+var int auditConfLag = 0
+var int auditAnchorLag = 0
+var int auditConfDirectionMismatch = 0
+var int auditAnchorDirectionMismatch = 0
+var int auditBaseSides = 0
+var int auditHtfBlocked = 0
+var int auditVsaBlocked = 0
+var int auditEmaBlocked = 0
+var int auditNoHtf = 0
+var int auditNoVsa = 0
+var int auditNoEma = 0
+var int auditMaxConfCommitDelay = 0
+var int auditMaxAnchorCommitDelay = 0
+if barstate.isconfirmed and supportedTf
+    bool confClosedNow = not na(nConfEnd) and nConfEnd == time_close
+    bool anchorClosedNow = not na(nAnchorEnd) and nAnchorEnd == time_close
+    if confClosedNow and confLastCommittedEnd != nConfEnd
+        auditConfLag += 1
+    if anchorClosedNow and anchorLastCommittedEnd != nAnchorEnd
+        auditAnchorLag += 1
+    if confCommittedValid and confLastCommittedEnd == nConfEnd
+        auditConfDirectionMismatch += math.sign(nConfC-nConfO) != math.sign(confCommittedC-confCommittedO) ? 1 : 0
+    if anchorCommittedValid and anchorLastCommittedEnd == nAnchorEnd
+        auditAnchorDirectionMismatch += math.sign(nAnchorC-nAnchorO) != math.sign(anchorCommittedC-anchorCommittedO) ? 1 : 0
+    if confirmationBucketCommitted
+        auditMaxConfCommitDelay := math.max(auditMaxConfCommitDelay, int((time_close-confLastCommittedEnd)/60000))
+    if anchorBucketCommitted
+        auditMaxAnchorCommitDelay := math.max(auditMaxAnchorCommitDelay, int((time_close-anchorLastCommittedEnd)/60000))
+    for mask in array.from(obsLongMask, obsShortMask)
+        if mask % 64 == 0
+            auditBaseSides += 1
+            auditHtfBlocked += f_setup_has(mask, 64) ? 1 : 0
+            auditVsaBlocked += f_setup_has(mask, 128) ? 1 : 0
+            auditEmaBlocked += f_setup_has(mask, 256) ? 1 : 0
+        auditNoHtf += mask == 0 or mask == 64 ? 1 : 0
+        auditNoVsa += mask == 0 or mask == 128 ? 1 : 0
+        auditNoEma += mask == 0 or mask == 256 ? 1 : 0
+if barstate.islastconfirmedhistory
+    log.info("PRACTICAL_AUDIT|" + syminfo.tickerid + "|tf=" + timeframe.period + "|bars=" + str.tostring(witnessBars) + "|ready=" + str.tostring(e2ReadyLong) + "/" + str.tostring(e2ReadyShort) + "|baseSides=" + str.tostring(auditBaseSides) + "|blockedHTF/VSA/EMA=" + str.tostring(auditHtfBlocked) + "/" + str.tostring(auditVsaBlocked) + "/" + str.tostring(auditEmaBlocked) + "|withoutHTF/VSA/EMA=" + str.tostring(auditNoHtf) + "/" + str.tostring(auditNoVsa) + "/" + str.tostring(auditNoEma) + "|lateConf/Anchor=" + str.tostring(auditConfLag) + "/" + str.tostring(auditAnchorLag) + "|directionDiff=" + str.tostring(auditConfDirectionMismatch) + "/" + str.tostring(auditAnchorDirectionMismatch) + "|maxCommitDelayMinutes=" + str.tostring(auditMaxConfCommitDelay) + "/" + str.tostring(auditMaxAnchorCommitDelay))
+var table auditPanel = table.new(position.top_right, 2, 8, bgcolor = color.rgb(22, 32, 44))
+if barstate.islast
+    table.cell(auditPanel, 0, 0, "AUDIT - " + timeframe.period, text_color = color.white)
+    table.cell(auditPanel, 1, 0, str.tostring(witnessBars) + " bars", text_color = color.white)
+    table.cell(auditPanel, 0, 1, "Eligible long / short", text_color = color.white)
+    table.cell(auditPanel, 1, 1, str.tostring(e2ReadyLong) + " / " + str.tostring(e2ReadyShort), text_color = color.white)
+    table.cell(auditPanel, 0, 2, "Sweep + structure sides", text_color = color.white)
+    table.cell(auditPanel, 1, 2, str.tostring(auditBaseSides), text_color = color.white)
+    table.cell(auditPanel, 0, 3, "Blocked HTF / VSA / EMA", text_color = color.white)
+    table.cell(auditPanel, 1, 3, str.tostring(auditHtfBlocked) + " / " + str.tostring(auditVsaBlocked) + " / " + str.tostring(auditEmaBlocked), text_color = color.white)
+    table.cell(auditPanel, 0, 4, "Without HTF / VSA / EMA", text_color = color.white)
+    table.cell(auditPanel, 1, 4, str.tostring(auditNoHtf) + " / " + str.tostring(auditNoVsa) + " / " + str.tostring(auditNoEma), text_color = color.white)
+    table.cell(auditPanel, 0, 5, "Late HTF conf / anchor", text_color = color.yellow)
+    table.cell(auditPanel, 1, 5, str.tostring(auditConfLag) + " / " + str.tostring(auditAnchorLag), text_color = color.yellow)
+    table.cell(auditPanel, 0, 6, "Old/new direction differs", text_color = color.yellow)
+    table.cell(auditPanel, 1, 6, str.tostring(auditConfDirectionMismatch) + " / " + str.tostring(auditAnchorDirectionMismatch), text_color = color.yellow)
+    table.cell(auditPanel, 0, 7, "Diagnostic only", text_color = color.white)
+    table.cell(auditPanel, 1, 7, "Not profitability", text_color = color.white)

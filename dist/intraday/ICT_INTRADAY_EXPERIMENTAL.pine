@@ -1,0 +1,441 @@
+//@version=6
+indicator("ICT Intraday • XAU / NAS — thử nghiệm", "ICT EXP", overlay = true, max_boxes_count = 80, max_labels_count = 250, max_lines_count = 30, max_bars_back = 500)
+int BUILD_TOKEN = 158879367533117
+
+// Contract v1: interview 2026-11-13. Defaults are research settings, not optimized parameters.
+string viewGroup = "Hiển thị"
+bool showZones = input.bool(true, "Vùng HTF", group = viewGroup)
+bool showPanel = input.bool(true, "Bảng bối cảnh", group = viewGroup)
+int visibleGroups = input.int(12, "Số nhóm vùng gần giá", minval = 2, maxval = 24, group = viewGroup)
+bool sendAlerts = input.bool(true, "Cảnh báo vùng / xác nhận / open", group = "Cảnh báo")
+bool auditLogs = input.bool(false, "Log kiểm chứng (không phải kết quả giao dịch)", group = "Kiểm chứng")
+float rrWarning = input.float(1.5, "Cảnh báo RR gross dưới", minval = 0.1, step = 0.1, group = "Cảnh báo")
+int ATR_LENGTH = 14
+int MAX_AGE = 100
+int WAIT_BARS = 3
+float SR_ATR = 0.2
+float FVG_ATR = 0.1
+float STOP_ATR = 0.1
+float tick = syminfo.mintick
+bool knownFeed = syminfo.tickerid == "OANDA:XAUUSD" or syminfo.tickerid == "FOREXCOM:NAS100"
+bool standardChart = chart.is_standard
+bool entryChart = timeframe.isminutes and (timeframe.multiplier == 5 or timeframe.multiplier == 15)
+bool canSignal = knownFeed and standardChart and entryChart
+string activeTf = timeframe.isminutes and (timeframe.multiplier == 5 or timeframe.multiplier == 60) ? "60" : "240"
+
+type Zone
+    string id
+    string kind
+    int side
+    float lo
+    float hi
+    int anchor
+    int available
+    int bornIndex
+    bool used = false
+    int attemptBar = na
+    float extreme = na
+    bool blocked = false
+
+type Setup
+    string id
+    int side
+    int confirmedAt
+    int confirmBar
+    float referenceClose
+    float atr
+    float extreme
+    float stop
+    float target
+    string sources
+    string kinds
+
+type OpenObservation
+    string setupId
+    int at
+    float price
+    float rr
+    bool adverse
+
+f_price(float value) =>
+    na(value) ? "Chưa rõ" : str.tostring(value, format.mintick)
+
+f_direction(int value) =>
+    value == 1 ? "TĂNG" : value == -1 ? "GIẢM" : "CHƯA RÕ"
+
+f_rr(int side, float entry, float stop, float target) =>
+    float risk = side * (entry - stop)
+    float reward = side * (target - entry)
+    not na(target) and risk > 0 and reward > 0 ? reward / risk : na
+
+f_rrText(float rr) =>
+    na(rr) ? "TP/RR chưa xác định" : str.tostring(rr, "#.##") + "R gross" + (rr < rrWarning ? " • RR THẤP" : "")
+
+f_outward(float value, int side) =>
+    (side == 1 ? math.floor(value / tick + 1e-9) : math.ceil(value / tick - 1e-9)) * tick
+
+// This function runs in each requested timeframe. All returned fields are offset together.
+f_context() =>
+    float a = ta.atr(ATR_LENGTH)
+    bool ph = not na(high[4]) and high[2] > high[3] and high[2] > high[4] and high[2] >= high[1] and high[2] >= high
+    bool pl = not na(low[4]) and low[2] < low[3] and low[2] < low[4] and low[2] <= low[1] and low[2] <= low
+    var float lastHigh = na
+    var float lastLow = na
+    var int highIdentity = na
+    var int lowIdentity = na
+    var int brokenHigh = na
+    var int brokenLow = na
+    var int bias = 0
+    bool up = not na(lastHigh) and close > lastHigh and (na(brokenHigh) or brokenHigh != highIdentity)
+    bool down = not na(lastLow) and close < lastLow and (na(brokenLow) or brokenLow != lowIdentity)
+    int breakSide = up and not down ? 1 : down and not up ? -1 : 0
+    if up and down
+        bias := 0
+    else if breakSide != 0
+        bias := breakSide
+    if up
+        brokenHigh := highIdentity
+    if down
+        brokenLow := lowIdentity
+    float obLo = na
+    float obHi = na
+    if breakSide != 0 and not na(a) and a > 0
+        for k = 1 to 10
+            bool opposite = breakSide == 1 ? close[k] < open[k] : close[k] > open[k]
+            if opposite
+                obLo := low[k]
+                obHi := high[k]
+                break
+    float pivotHigh = ph and not na(a) and a > 0 ? high[2] : na
+    float pivotLow = pl and not na(a) and a > 0 ? low[2] : na
+    // A new pivot cannot be broken before its confirmation was available.
+    if ph
+        lastHigh := high[2]
+        highIdentity := time[2]
+    if pl
+        lastLow := low[2]
+        lowIdentity := time[2]
+    float minGap = math.max(FVG_ATR * a, syminfo.mintick)
+    int fvgSide = not na(a) and a > 0 ? (low - high[2] >= minGap ? 1 : low[2] - high >= minGap ? -1 : 0) : 0
+    float fvgLo = fvgSide == 1 ? high[2] : fvgSide == -1 ? high : na
+    float fvgHi = fvgSide == 1 ? low : fvgSide == -1 ? low[2] : na
+    int sdSide = 0
+    float sdLo = na
+    float sdHi = na
+    float baseLow = na
+    float baseHigh = na
+    bool compact = true
+    if not na(a[1]) and a[1] > 0 and math.abs(close - open) >= a[1]
+        for k = 1 to 3
+            float span = high[k] - low[k]
+            compact := compact and not na(span) and span > 0 and math.abs(close[k] - open[k]) <= span * 0.5
+            baseLow := na(baseLow) ? low[k] : math.min(baseLow, low[k])
+            baseHigh := na(baseHigh) ? high[k] : math.max(baseHigh, high[k])
+            if compact and baseHigh - baseLow <= a[1]
+                int departure = close > baseHigh and close > open ? 1 : close < baseLow and close < open ? -1 : 0
+                if departure != 0
+                    sdSide := departure
+                    sdLo := baseLow
+                    sdHi := baseHigh
+    [time[1], time_close[1], bar_index[1], close[1], a[1], bias[1], pivotHigh[1], pivotLow[1], time[3], breakSide[1], obLo[1], obHi[1], fvgSide[1], fvgLo[1], fvgHi[1], sdSide[1], sdLo[1], sdHi[1]]
+
+// Never request lower-timeframe context and mislabel it as confirmed HTF.
+string h1Request = timeframe.in_seconds() <= 3600 ? "60" : timeframe.period
+string h4Request = timeframe.in_seconds() <= 14400 ? "240" : timeframe.period
+string dayRequest = timeframe.in_seconds() <= 86400 ? "D" : timeframe.period
+string weekRequest = timeframe.in_seconds() <= 604800 ? "W" : timeframe.period
+[h1Time, h1CloseTime, h1Index, h1Close, h1Atr, h1Bias, h1Ph, h1Pl, h1Anchor, h1ObDir, h1ObLo, h1ObHi, h1FvgDir, h1FvgLo, h1FvgHi, h1SdDir, h1SdLo, h1SdHi] = request.security(syminfo.tickerid, h1Request, f_context(), lookahead = barmerge.lookahead_on)
+[h4Time, h4CloseTime, h4Index, h4Close, h4Atr, h4Bias, h4Ph, h4Pl, h4Anchor, h4ObDir, h4ObLo, h4ObHi, h4FvgDir, h4FvgLo, h4FvgHi, h4SdDir, h4SdLo, h4SdHi] = request.security(syminfo.tickerid, h4Request, f_context(), lookahead = barmerge.lookahead_on)
+[dTime, dCloseTime, dIndex, dClose, dAtr, dBias, dPh, dPl, dAnchor, dObDir, dObLo, dObHi, dFvgDir, dFvgLo, dFvgHi, dSdDir, dSdLo, dSdHi] = request.security(syminfo.tickerid, dayRequest, f_context(), lookahead = barmerge.lookahead_on)
+[wTime, wCloseTime, wIndex, wClose, wAtr, wBias, wPh, wPl, wAnchor, wObDir, wObLo, wObHi, wFvgDir, wFvgLo, wFvgHi, wSdDir, wSdLo, wSdHi] = request.security(syminfo.tickerid, weekRequest, f_context(), lookahead = barmerge.lookahead_on)
+float ltfAtr = ta.atr(ATR_LENGTH)
+int activeBias = nz(activeTf == "60" ? h1Bias : h4Bias, 0)
+int otherBias = nz(activeTf == "60" ? h4Bias : h1Bias, 0)
+bool contextConflict = activeBias != 0 and otherBias != 0 and activeBias != otherBias
+
+var array<Zone> h1Zones = array.new<Zone>()
+var array<Zone> h4Zones = array.new<Zone>()
+
+f_addZone(array<Zone> zones, string tf, string kind, int side, float lo, float hi, int anchor, int available, int born) =>
+    if not na(lo) and not na(hi) and lo <= hi and side != 0
+        string id = syminfo.tickerid + ":" + tf + ":" + kind + ":" + str.tostring(side) + ":" + str.tostring(anchor) + ":" + str.tostring(available)
+        array.push(zones, Zone.new(id, kind, side, lo, hi, anchor, available, born))
+        if kind == "BSL" or kind == "SSL" or kind == "SR"
+            int count = 0
+            for z in zones
+                if z.kind == kind and z.side == side
+                    count += 1
+            int i = 0
+            while count > 3 and i < array.size(zones)
+                Zone old = array.get(zones, i)
+                if old.kind == kind and old.side == side
+                    array.remove(zones, i)
+                    count -= 1
+                else
+                    i += 1
+    0
+
+f_ingest(array<Zone> zones, string tf, int stamp, int available, int index, float c, float atr, float ph, float pl, int anchor, int obDir, float obLo, float obHi, int fvgDir, float fvgLo, float fvgHi, int sdDir, float sdLo, float sdHi) =>
+    int i = array.size(zones) - 1
+    while i >= 0
+        Zone z = array.get(zones, i)
+        bool invalid = z.side == 1 ? c < z.lo : c > z.hi
+        if invalid or index - z.bornIndex >= MAX_AGE
+            array.remove(zones, i)
+        i -= 1
+    if not na(atr) and atr > 0
+        if not na(ph)
+            f_addZone(zones, tf, "BSL", -1, ph, ph, anchor, available, index)
+            f_addZone(zones, tf, "SR", -1, ph - SR_ATR * atr, ph + SR_ATR * atr, anchor, available, index)
+        if not na(pl)
+            f_addZone(zones, tf, "SSL", 1, pl, pl, anchor, available, index)
+            f_addZone(zones, tf, "SR", 1, pl - SR_ATR * atr, pl + SR_ATR * atr, anchor, available, index)
+        f_addZone(zones, tf, "OB", obDir, obLo, obHi, stamp, available, index)
+        f_addZone(zones, tf, "FVG", fvgDir, fvgLo, fvgHi, stamp, available, index)
+        f_addZone(zones, tf, "SD", sdDir, sdLo, sdHi, stamp, available, index)
+    0
+
+bool newH1 = not na(h1Time) and (na(h1Time[1]) or h1Time != h1Time[1])
+bool newH4 = not na(h4Time) and (na(h4Time[1]) or h4Time != h4Time[1])
+if h1Request == "60" and newH1
+    f_ingest(h1Zones, "60", h1Time, h1CloseTime, h1Index, h1Close, h1Atr, h1Ph, h1Pl, h1Anchor, h1ObDir, h1ObLo, h1ObHi, h1FvgDir, h1FvgLo, h1FvgHi, h1SdDir, h1SdLo, h1SdHi)
+if h4Request == "240" and newH4
+    f_ingest(h4Zones, "240", h4Time, h4CloseTime, h4Index, h4Close, h4Atr, h4Ph, h4Pl, h4Anchor, h4ObDir, h4ObLo, h4ObHi, h4FvgDir, h4FvgLo, h4FvgHi, h4SdDir, h4SdLo, h4SdHi)
+array<Zone> activeZones = activeTf == "60" ? h1Zones : h4Zones
+
+f_contact(Zone z) =>
+    high >= z.lo and low <= z.hi
+
+f_sweepOrTouch(Zone z) =>
+    bool liquidity = z.kind == "BSL" or z.kind == "SSL"
+    f_contact(z) and (not liquidity or (z.side == 1 ? low <= z.lo - tick : high >= z.hi + tick))
+
+f_reclaimed(Zone z) =>
+    bool liquidity = z.kind == "BSL" or z.kind == "SSL"
+    z.side == 1 ? (liquidity ? close >= z.hi + tick : close > z.hi) : (liquidity ? close <= z.lo - tick : close < z.lo)
+
+f_target(array<Zone> zones, int side, float entry) =>
+    float target = na
+    for z in zones
+        // Used entry zones still represent structure until invalidated/expired.
+        if z.side == -side and z.available <= time
+            float candidate = side == 1 ? z.lo : z.hi
+            if side * (candidate - entry) >= tick
+                if na(target) or side * (candidate - target) < 0
+                    target := candidate
+    target
+
+f_evaluate(array<Zone> zones, int bias, string tf, float atr) =>
+    Setup result = na
+    array<int> accepted = array.new<int>()
+    float extreme = na
+    string sources = ""
+    string kinds = ""
+    if array.size(zones) > 0
+        for i = 0 to array.size(zones) - 1
+            Zone z = array.get(zones, i)
+            if not z.used and z.available <= time
+                bool contact = f_contact(z)
+                if z.side != bias or na(atr) or atr <= 0
+                    z.attemptBar := na
+                    z.extreme := na
+                    z.blocked := contact
+                else
+                    if z.blocked and not contact
+                        z.blocked := false
+                    if not na(z.attemptBar) and bar_index - z.attemptBar > WAIT_BARS
+                        z.attemptBar := na
+                        z.extreme := na
+                        z.blocked := contact
+                    if na(z.attemptBar) and not z.blocked and f_sweepOrTouch(z)
+                        z.attemptBar := bar_index
+                        z.extreme := z.side == 1 ? low : high
+                    if not na(z.attemptBar)
+                        z.extreme := z.side == 1 ? math.min(z.extreme, low) : math.max(z.extreme, high)
+                        if f_reclaimed(z)
+                            array.push(accepted, i)
+                            extreme := na(extreme) ? z.extreme : bias == 1 ? math.min(extreme, z.extreme) : math.max(extreme, z.extreme)
+                            sources += (sources == "" ? "" : ",") + z.id
+                            if not str.contains("|" + kinds + "|", "|" + z.kind + "|")
+                                kinds += (kinds == "" ? "" : "|") + z.kind
+    if array.size(accepted) > 0
+        float buffer = math.max(STOP_ATR * atr, tick)
+        float stop = f_outward(extreme - bias * buffer, bias)
+        if bias * (close - stop) > 0
+            float target = f_target(zones, bias, close)
+            string id = syminfo.tickerid + ":" + tf + ">" + timeframe.period + ":" + str.tostring(time_close) + ":" + str.tostring(bias)
+            result := Setup.new(id, bias, time_close, bar_index, close, atr, extreme, stop, target, sources, kinds)
+            for i in accepted
+                Zone z = array.get(zones, i)
+                z.used := true
+                z.attemptBar := na
+    result
+
+var Setup latest = na
+var OpenObservation opening = na
+var array<label> eventLabels = array.new<label>()
+varip array<string> touchAlerted = array.new<string>()
+varip string lastConfirmedAlert = ""
+varip string lastOpenAlert = ""
+if barstate.isnew
+    array.clear(touchAlerted)
+
+// Recompute on every tick: ordinary state rolls back within a realtime bar.
+// Only alert delivery uses varip; historical signals never depend on it.
+bool observedOpen = not na(latest) and bar_index == latest.confirmBar + 1
+if observedOpen
+    float rr = f_rr(latest.side, open, latest.stop, latest.target)
+    bool adverse = latest.side * (open - latest.stop) <= 0 or (not na(latest.target) and latest.side * (latest.target - open) <= 0)
+    opening := OpenObservation.new(latest.id, time, open, rr, adverse)
+    string openText = "OPEN CHART " + f_price(open) + "\n" + (adverse ? "GIÁ BẤT LỢI • TỰ ĐÁNH GIÁ" : f_rrText(rr)) + "\nKhông phải giá khớp broker"
+    array.push(eventLabels, label.new(time, open, openText, xloc = xloc.bar_time, style = label.style_label_left, color = adverse ? color.orange : color.new(color.gray, 25), textcolor = color.white, size = size.tiny))
+    if sendAlerts and barstate.isrealtime and lastOpenAlert != latest.id
+        alert(latest.id + " | " + openText, alert.freq_all)
+        lastOpenAlert := latest.id
+    if auditLogs and barstate.isconfirmed
+        log.info("OPEN|" + latest.id + "|" + str.tostring(time) + "|" + str.tostring(open) + "|" + str.tostring(rr) + "|" + str.tostring(adverse))
+
+bool touchPulse = false
+if canSignal and activeBias != 0 and not na(ltfAtr) and ltfAtr > 0
+    string touched = ""
+    for z in activeZones
+        if not z.used and not z.blocked and na(z.attemptBar) and z.available <= time and z.side == activeBias and f_contact(z)
+            touchPulse := true
+            if not array.includes(touchAlerted, z.id)
+                touched += (touched == "" ? "" : ", ") + z.kind
+                array.push(touchAlerted, z.id)
+    if touched != "" and sendAlerts and barstate.isrealtime
+        alert(syminfo.tickerid + " " + activeTf + ">" + timeframe.period + " | TỚI VÙNG " + touched + " | Chưa xác nhận entry", alert.freq_all)
+
+Setup confirmed = na
+if canSignal and barstate.isconfirmed
+    confirmed := f_evaluate(activeZones, activeBias, activeTf, ltfAtr)
+if not na(confirmed)
+    latest := confirmed
+    opening := na
+    string sideText = confirmed.side == 1 ? "BUY" : "SELL"
+    float rr = f_rr(confirmed.side, confirmed.referenceClose, confirmed.stop, confirmed.target)
+    string setupText = sideText + " • " + confirmed.kinds + "\nSL " + f_price(confirmed.stop) + " • TP " + f_price(confirmed.target) + "\n" + f_rrText(rr) + " (tạm theo close)\nEntry dự kiến: đầu nến sau"
+    array.push(eventLabels, label.new(time, confirmed.side == 1 ? low : high, setupText, xloc = xloc.bar_time, style = confirmed.side == 1 ? label.style_label_up : label.style_label_down, color = confirmed.side == 1 ? color.teal : color.maroon, textcolor = color.white, size = size.small, tooltip = confirmed.id + "\nNguồn: " + confirmed.sources))
+    if sendAlerts and barstate.isrealtime and lastConfirmedAlert != confirmed.id
+        alert(confirmed.id + " | ĐÃ XÁC NHẬN | " + setupText + (contextConflict ? " | KHUNG CÒN LẠI TRÁI HƯỚNG" : ""), alert.freq_all)
+        lastConfirmedAlert := confirmed.id
+    if auditLogs
+        log.info("SETUP|" + confirmed.id + "|" + str.tostring(confirmed.referenceClose) + "|" + str.tostring(confirmed.atr) + "|" + str.tostring(confirmed.extreme) + "|" + str.tostring(confirmed.stop) + "|" + str.tostring(confirmed.target) + "|" + confirmed.sources)
+while array.size(eventLabels) > 180
+    label.delete(array.shift(eventLabels))
+
+bool buyPulse = not na(confirmed) and confirmed.side == 1
+bool sellPulse = not na(confirmed) and confirmed.side == -1
+plotshape(buyPulse, "BUY đã chốt", shape.triangleup, location.belowbar, color.teal, size = size.tiny)
+plotshape(sellPulse, "SELL đã chốt", shape.triangledown, location.abovebar, color.maroon, size = size.tiny)
+plot(ltfAtr, "Audit ATR14 LTF", display = display.data_window, precision = 8)
+plot(activeBias, "Audit hướng HTF", display = display.data_window)
+plot(activeTf == "60" ? h1Atr : h4Atr, "Audit ATR14 HTF", display = display.data_window, precision = 8)
+plot(not na(confirmed) ? confirmed.stop : na, "Audit SL xác nhận", display = display.data_window)
+plot(not na(confirmed) ? confirmed.target : na, "Audit TP xác nhận", display = display.data_window)
+plot(not na(confirmed) ? confirmed.extreme : na, "Audit cực trị nhịp", display = display.data_window)
+plot(observedOpen ? open : na, "Audit open nến sau", display = display.data_window)
+plot(time_close / 1000, "Audit close epoch", display = display.data_window, precision = 0)
+plot(bar_index, "Audit source index", display = display.data_window, precision = 0)
+plot(activeTf == "60" ? h1Index : h4Index, "Audit HTF source index", display = display.data_window, precision = 0)
+plot(tick, "Audit tick", display = display.data_window, precision = 8)
+plot(BUILD_TOKEN, "Audit build token", display = display.data_window, precision = 0)
+plot(syminfo.tickerid == "OANDA:XAUUSD" ? 1 : syminfo.tickerid == "FOREXCOM:NAS100" ? 2 : 0, "Audit feed", display = display.data_window, precision = 0)
+plot(timeframe.in_seconds() / 60, "Audit minutes", display = display.data_window, precision = 0)
+plot(standardChart ? 1 : 0, "Audit standard chart", display = display.data_window, precision = 0)
+plot(not na(confirmed) ? confirmed.side : 0, "Audit signal", display = display.data_window, precision = 0)
+alertcondition(sendAlerts and buyPulse, "BUY đã xác nhận", "ICT Intraday: BUY đã xác nhận; xem SL/TP và RR gross trên chart.")
+alertcondition(sendAlerts and sellPulse, "SELL đã xác nhận", "ICT Intraday: SELL đã xác nhận; xem SL/TP và RR gross trên chart.")
+
+type VisualGroup
+    int side
+    float lo
+    float hi
+    int left
+    string kinds
+    int count
+    int used
+
+var array<box> drawings = array.new<box>()
+var table panel = table.new(position.top_right, 2, 10, bgcolor = color.new(color.black, 15), border_width = 1)
+var line stopLine = na
+var line targetLine = na
+
+f_row(int row, string title, string value, color foreground) =>
+    table.cell(panel, 0, row, title, text_color = color.silver, text_size = size.small, text_halign = text.align_left)
+    table.cell(panel, 1, row, value, text_color = foreground, text_size = size.small, text_halign = text.align_left)
+
+if barstate.islast
+    while array.size(drawings) > 0
+        box.delete(array.pop(drawings))
+    if showZones and standardChart
+        array<VisualGroup> groups = array.new<VisualGroup>()
+        for side in array.from(-1, 1)
+            array<float> lows = array.new<float>()
+            array<int> indices = array.new<int>()
+            if array.size(activeZones) > 0
+                for i = 0 to array.size(activeZones) - 1
+                    Zone z = array.get(activeZones, i)
+                    if z.side == side
+                        array.push(lows, z.lo)
+                        array.push(indices, i)
+            array<int> order = array.sort_indices(lows)
+            for sorted in order
+                Zone z = array.get(activeZones, array.get(indices, sorted))
+                bool merged = false
+                if array.size(groups) > 0
+                    VisualGroup g = array.get(groups, array.size(groups) - 1)
+                    if g.side == side and z.lo <= g.hi
+                        g.hi := math.max(g.hi, z.hi)
+                        g.left := math.min(g.left, z.available)
+                        g.count += 1
+                        g.used += z.used ? 1 : 0
+                        if not str.contains("|" + g.kinds + "|", "|" + z.kind + "|")
+                            g.kinds += "|" + z.kind
+                        merged := true
+                if not merged
+                    array.push(groups, VisualGroup.new(side, z.lo, z.hi, z.available, z.kind, 1, z.used ? 1 : 0))
+        array<float> distances = array.new<float>()
+        for g in groups
+            array.push(distances, math.max(math.max(g.lo - close, close - g.hi), 0))
+        array<int> nearest = array.sort_indices(distances)
+        int shown = 0
+        for index in nearest
+            if shown < visibleGroups
+                VisualGroup g = array.get(groups, index)
+                color ink = g.side == 1 ? color.teal : color.orange
+                string caption = (activeTf == "60" ? "H1 " : "H4 ") + g.kinds + " • " + str.tostring(g.count) + " nguồn" + (g.used > 0 ? " • đã dùng " + str.tostring(g.used) : "")
+                int rightEdge = time + int(timeframe.in_seconds() * 1000)
+                array.push(drawings, box.new(g.left, g.hi, rightEdge, g.lo, xloc = xloc.bar_time, border_color = color.new(ink, 30), bgcolor = color.new(ink, g.used == g.count ? 95 : 88), text = caption, text_size = size.tiny, text_color = ink, text_halign = text.align_right))
+                shown += 1
+    if not na(stopLine)
+        line.delete(stopLine)
+    if not na(targetLine)
+        line.delete(targetLine)
+    if not na(latest)
+        stopLine := line.new(latest.confirmedAt, latest.stop, time_close, latest.stop, xloc = xloc.bar_time, extend = extend.right, color = color.red, style = line.style_dashed)
+        if not na(latest.target)
+            targetLine := line.new(latest.confirmedAt, latest.target, time_close, latest.target, xloc = xloc.bar_time, extend = extend.right, color = color.teal, style = line.style_dashed)
+    table.clear(panel, 0, 0, 1, 9)
+    if showPanel
+        bool london = not na(time(timeframe.period, "0800-1700:23456", "Europe/London"))
+        bool newYork = not na(time(timeframe.period, "0800-1700:23456", "America/New_York"))
+        bool tokyo = not na(time(timeframe.period, "0900-1800:23456", "Asia/Tokyo"))
+        string session = (tokyo ? "Tokyo " : "") + (london ? "London " : "") + (newYork ? "New York" : "")
+        session := session == "" ? "Ngoài giờ tham chiếu" : session
+        string mode = not standardChart ? "CẦN NẾN GIÁ TIÊU CHUẨN" : not knownFeed ? "FEED CHƯA HỖ TRỢ • QUAN SÁT" : not entryChart ? "CHỈ QUAN SÁT" : activeBias == 0 ? "CHỜ HƯỚNG HTF" : "THEO DÕI VÙNG"
+        f_row(0, "ICT Intraday", "THỬ NGHIỆM • " + (activeTf == "60" ? "H1 → M5" : "H4 → M15"), color.white)
+        f_row(1, "H1 / H4", (h1Request == "60" ? f_direction(h1Bias) : "N/A") + " / " + (h4Request == "240" ? f_direction(h4Bias) : "N/A") + (contextConflict and entryChart ? " • TRÁI HƯỚNG" : ""), contextConflict and entryChart ? color.orange : color.white)
+        f_row(2, "D1 / W1", (dayRequest == "D" ? f_direction(dBias) : "N/A") + " / " + (weekRequest == "W" ? f_direction(wBias) : "N/A") + " • tham khảo", color.silver)
+        f_row(3, "Phiên tham chiếu", session + " • không lọc", color.silver)
+        f_row(4, "Trạng thái", mode, canSignal ? color.white : color.orange)
+        if not na(latest)
+            f_row(5, "Setup gần nhất", (latest.side == 1 ? "BUY " : "SELL ") + latest.kinds + " • " + str.format_time(latest.confirmedAt, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN", color.white)
+            f_row(6, "Close / Open chart", f_price(latest.referenceClose) + " / " + (na(opening) ? "Chờ nến sau" : f_price(opening.price)), color.white)
+            f_row(7, "SL / TP đã khóa", f_price(latest.stop) + " / " + f_price(latest.target), color.white)
+            float shownRr = na(opening) ? f_rr(latest.side, latest.referenceClose, latest.stop, latest.target) : opening.rr
+            f_row(8, na(opening) ? "RR tạm theo close" : "RR theo open chart", not na(opening) and opening.adverse ? "GIÁ BẤT LỢI • TỰ ĐÁNH GIÁ" : f_rrText(shownRr), color.orange)
+        else
+            f_row(5, "Setup gần nhất", "Chưa có setup đã xác nhận", color.silver)
+        f_row(9, "Giới hạn", "Giá chart ≠ fill broker • gross, chưa trừ phí", color.silver)

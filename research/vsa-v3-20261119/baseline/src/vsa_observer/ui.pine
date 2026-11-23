@@ -1,0 +1,167 @@
+// All observations below describe the last CLOSED standard candle.
+var int obsTime = na
+var int obsVsa = 99
+var float obsRv = na
+var float obsRr = na
+var float obsLocation = na
+var float obsEma = na
+var float obsDistance = na
+var float obsAtr = na
+var float obsClose = na
+var int obsSweep = 0
+var int obsLastEventTime = na
+var string obsLastEvent = "Chưa có sự kiện"
+var string obsSession = "N/A"
+var SweepRecord obsLowSweep = SweepRecord.new()
+var SweepRecord obsHighSweep = SweepRecord.new()
+var int obsLongMask = 1
+var int obsShortMask = 1
+var bool obsLongStructure = false
+var bool obsShortStructure = false
+var bool obsContextReady = false
+var string obsLongZone = "Chưa có vùng"
+var string obsShortZone = "Chưa có vùng"
+var int obsLongZoneCode = 0
+var int obsShortZoneCode = 0
+var int obsLongZoneId = na
+var int obsShortZoneId = na
+var int obsConfDirection = 0
+var int obsAnchorDirection = 0
+var int obsLastLabelBar = -100
+var int obsLastLabelCode = 99
+string obsCurrentSession = f_observer_session(timeframe.period)
+var array<label> obsLabels = array.new<label>()
+int obsRawVsa = f_obs_vsa(vwValid, vwRelativeVolume, vwRelativeRange, vwCloseLocation, close - close[1], volume < volume[1] and volume < volume[2])
+f_obs_vsa_text(int code) =>
+    code == 99 ? "N/A: thiếu volume / warmup / biên nến" : code == 1 ? "Volume cao • nến rộng, đóng cao" : code == -1 ? "Volume cao • nến rộng, đóng thấp" : code == 2 ? "Nỗ lực lớn, biên hẹp • đóng cao" : code == -2 ? "Nỗ lực lớn, biên hẹp • đóng thấp" : code == 3 ? "No Supply? • mẫu volume thấp" : code == -3 ? "No Demand? • mẫu volume thấp" : "Không có mẫu VSA nổi bật"
+f_obs_dir(int direction) =>
+    direction > 0 ? "TĂNG" : direction < 0 ? "GIẢM" : "CHƯA RÕ"
+f_obs_num(float value) =>
+    na(value) ? "N/A" : str.tostring(value, "#.##")
+f_obs_price(float value) =>
+    na(value) ? "N/A" : str.tostring(value, format.mintick)
+bool obsClosed = barstate.isconfirmed and smcCalculationTf
+if obsClosed
+    obsTime := time_close
+    obsSession := obsCurrentSession
+    obsVsa := obsRawVsa
+    obsRv := vwRelativeVolume
+    obsRr := vwRelativeRange
+    obsLocation := vwCloseLocation
+    obsEma := ema200
+    obsAtr := inspectorAtr
+    obsClose := close
+    obsDistance := not na(inspectorAtr) and inspectorAtr > 0 ? (close - ema200) / inspectorAtr : na
+    obsLowSweep.update(1, smcSweptLowLevel, low, smcCanonicalBarIndex, time, close)
+    obsHighSweep.update(-1, smcSweptHighLevel, high, smcCanonicalBarIndex, time, close)
+    int lowAge = obsLowSweep.age(smcCanonicalBarIndex)
+    int highAge = obsHighSweep.age(smcCanonicalBarIndex)
+    bool lowRecent = lowAge >= 0 and lowAge <= SETUP_MAX_AGE and not obsLowSweep.invalid
+    bool highRecent = highAge >= 0 and highAge <= SETUP_MAX_AGE and not obsHighSweep.invalid
+    obsSweep := not na(smcSweptLowLevel) and not na(smcSweptHighLevel) ? 2 : not na(smcSweptLowLevel) ? 1 : not na(smcSweptHighLevel) ? -1 : 0
+    obsLongStructure := f_setup_structure(1, smcTrend, smcLatestStructure.event_type, smcLatestStructure.time, obsLowSweep.stamp)
+    obsShortStructure := f_setup_structure(-1, smcTrend, smcLatestStructure.event_type, smcLatestStructure.time, obsHighSweep.stamp)
+    obsContextReady := supportedTf and confCommittedValid and anchorCommittedValid
+    obsConfDirection := obsContextReady ? int(f_obs_candle_direction(confCommittedO, confCommittedC)) : 0
+    obsAnchorDirection := obsContextReady ? int(f_obs_candle_direction(anchorCommittedO, anchorCommittedC)) : 0
+    bool dataReady = vwValid and not na(inspectorAtr) and inspectorAtr > 0 and committedFeatureBars >= WARMUP_BARS
+    bool extended = not na(obsDistance) and math.abs(obsDistance) > 2.5
+    obsLongMask := f_setup_mask(lowAge, obsLowSweep.invalid, lowRecent and highRecent, obsLongStructure, obsContextReady and obsConfDirection == 1 and obsAnchorDirection == 1, obsVsa != 99 and obsVsa > 0, extended, dataReady)
+    obsShortMask := f_setup_mask(highAge, obsHighSweep.invalid, lowRecent and highRecent, obsShortStructure, obsContextReady and obsConfDirection == -1 and obsAnchorDirection == -1, obsVsa != 99 and obsVsa < 0, extended, dataReady)
+    [longZone, longZoneCode, longZoneId, longZoneDistance] = f_setup_zone(1, close, inspectorAtr)
+    [shortZone, shortZoneCode, shortZoneId, shortZoneDistance] = f_setup_zone(-1, close, inspectorAtr)
+    obsLongZone := longZone
+    obsShortZone := shortZone
+    obsLongZoneCode := longZoneCode
+    obsShortZoneCode := shortZoneCode
+    obsLongZoneId := longZoneId
+    obsShortZoneId := shortZoneId
+    string eventText = obsSweep == 2 ? "Quét hai phía" : obsSweep == 1 ? "Quét đáy • lấy lại mức" : obsSweep == -1 ? "Quét đỉnh • lấy lại mức" : ""
+    if obsVsa != 0 and obsVsa != 99
+        eventText += (eventText == "" ? "" : "\n") + f_obs_vsa_text(obsVsa)
+    if eventText != ""
+        obsLastEvent := eventText
+        obsLastEventTime := time_close
+        if showVsaEvents and (obsSweep != 0 or (showVsaDetails and (obsVsa != obsLastLabelCode or smcCanonicalBarIndex - obsLastLabelBar >= 3)))
+            bool above = f_obs_label_above(obsSweep, obsVsa)
+            color eventColor = obsSweep == 2 ? color.orange : above ? color.rgb(176, 73, 103) : color.rgb(0, 122, 125)
+            float labelGap = math.max(nz(inspectorAtr, high - low) * 0.18, syminfo.mintick * 3)
+            label mark = label.new(time, above ? high + labelGap : low - labelGap, obsSweep != 0 ? (obsSweep == 2 ? "Quét hai phía" : obsSweep == 1 ? "Quét đáy" : "Quét đỉnh") : (math.abs(obsVsa) == 1 ? "V↑ R↑" : math.abs(obsVsa) == 2 ? "V↑ R↓" : "V↓ R↓"), xloc = xloc.bar_time, style = above ? label.style_label_down : label.style_label_up, color = color.new(eventColor, 20), textcolor = color.white, size = size.tiny, tooltip = eventText + "\nChốt: " + str.format_time(time_close, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN\nRV: " + f_obs_num(obsRv) + " • Range: " + f_obs_num(obsRr) + "\nMẫu OHLC/volume; không xác nhận dòng tiền tổ chức.")
+            array.push(obsLabels, mark)
+            obsLastLabelBar := smcCanonicalBarIndex
+            obsLastLabelCode := obsVsa
+    while array.size(obsLabels) > eventLimit
+        label.delete(array.shift(obsLabels))
+
+color obsCandleColor = obsClosed and colorVsaBars and obsVsa != 0 and obsVsa != 99 ? (obsVsa > 0 ? color.aqua : color.fuchsia) : na
+barcolor(obsCandleColor, title = "Mẫu VSA đã đóng")
+plot(showEma and smcCalculationTf ? obsEma : na, "EMA đã đóng", color = color.new(color.blue, 20), linewidth = 2)
+float obsCloudCenter = (committedEmaFast + committedEmaSlow) / 2
+bool obsCloudValid = showCloudContext and smcCalculationTf and committedFeatureBars >= WARMUP_BARS
+obsCloudUpper = plot(obsCloudValid ? obsCloudCenter + committedAtr * 0.5 : na, "Dải EMA trên", color = color.new(color.gray, 70), style = plot.style_linebr)
+obsCloudLower = plot(obsCloudValid ? obsCloudCenter - committedAtr * 0.5 : na, "Dải EMA dưới", color = color.new(color.gray, 70), style = plot.style_linebr)
+fill(obsCloudUpper, obsCloudLower, color = color.new(color.gray, 93), title = "Dải tham chiếu")
+
+color obsGood = color.rgb(58, 210, 174)
+color obsWait = color.rgb(245, 197, 105)
+color obsMuted = color.rgb(187, 197, 210)
+string obsFont = panelFont == "Vừa" ? size.normal : size.small
+int obsRowShift = panelPosition == "Trên phải" ? 1 : 0
+var table obsPanel = table.new(panelPosition == "Trên phải" ? position.top_right : panelPosition == "Dưới phải" ? position.bottom_right : position.bottom_left, 2, 7, frame_width = 0, border_width = 0)
+f_obs_cell(int col, int row, string content, color tone = color.white, string hint = "") =>
+    table.cell(obsPanel, col, row + obsRowShift, content, text_color = tone, bgcolor = row == 0 ? color.rgb(27, 43, 57) : color.rgb(22, 32, 44), text_size = row == 5 ? size.small : obsFont, text_halign = text.align_left, tooltip = hint)
+f_obs_brief(int mask, int side) =>
+    int stage = f_setup_phase(mask)
+    string pending = f_setup_has(mask, 1) ? "thiếu dữ liệu" : f_setup_has(mask, 64) ? "chờ HTF" : f_setup_has(mask, 128) ? "chờ VSA" : "xa EMA"
+    not supportedTf ? "Khung chưa hỗ trợ" : stage == 2 ? "Cấu trúc ✓ · " + pending : f_setup_phase_text(stage)
+f_obs_sweep_row(int row, string title, SweepRecord sweep) =>
+    int age = sweep.age(smcCanonicalBarIndex)
+    bool fresh = age >= 0 and age <= SETUP_MAX_AGE and not sweep.invalid
+    string description = age < 0 ? "Chưa thấy" : sweep.invalid ? "Có · đã mất hiệu lực" : age > SETUP_MAX_AGE ? "Có · đã quá lâu" : age == 0 ? "Vừa quét xong" : "Đã quét · " + str.tostring(age) + " nến trước"
+    f_obs_cell(0, row, title, obsMuted)
+    f_obs_cell(1, row, description, fresh ? obsGood : obsMuted, age < 0 ? "Chưa ghi nhận trong lịch sử đã nạp." : "Mức đã quét: " + f_obs_price(sweep.level) + "\nTuổi: " + str.tostring(age) + " nến. Có hiệu lực tối đa 10 nến nếu chưa bị phá.\nQuét nghĩa là giá vượt mức rồi đóng nến lấy lại mức đó.")
+f_obs_direction_row(int row, int side, int mask, SweepRecord sweep) =>
+    string invalidation = na(sweep.extreme) ? "Chưa có mức vô hiệu." : "Mất hiệu lực nếu nến đóng " + (side == 1 ? "dưới " : "trên ") + f_obs_price(sweep.extreme) + "."
+    string htfInfo = not supportedTf ? "Khung chưa hỗ trợ setup" : not obsContextReady ? "Thiếu nến HTF đã đóng" : "Thân nến " + confTf + ": " + f_obs_dir(obsConfDirection) + " · " + anchorTf + ": " + f_obs_dir(obsAnchorDirection) + "\nHTF chốt: " + str.format_time(confLastCommittedEnd, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " / " + str.format_time(anchorLastCommittedEnd, "dd/MM HH:mm", "Asia/Ho_Chi_Minh") + " VN"
+    string details = f_setup_phase_text(f_setup_phase(mask)) + "\n" + htfInfo + "\n" + (side == 1 ? obsLongZone : obsShortZone) + "\n" + f_setup_status(mask) + "\n" + f_setup_reasons(mask) + "\n" + invalidation + "\n\nVolume / TB: " + f_obs_num(obsRv) + " lần · Biên / TB: " + f_obs_num(obsRr) + " lần\n" + f_obs_vsa_text(obsVsa) + "\nEMA: " + f_obs_price(obsEma) + " · Cách: " + f_obs_num(obsDistance) + " ATR\nĐủ điều kiện quan sát không phải lệnh vào."
+    f_obs_cell(0, row, side == 1 ? "Hồi lên" : "Hồi xuống", obsMuted)
+    f_obs_cell(1, row, f_obs_brief(mask, side), mask == 0 ? obsGood : f_setup_has(mask, 8) or f_setup_has(mask, 4) ? obsMuted : obsWait, details)
+if barstate.islast
+    table.clear(obsPanel, 0, 0, 1, 6)
+    if showInspector
+        f_obs_cell(0, 0, syminfo.ticker + " · QUAN SÁT", obsGood, syminfo.tickerid + " · " + timeframe.period + "\nMọi đánh giá dùng nến đã đóng.")
+        if not smcCalculationTf
+            f_obs_cell(0, 1, "Cần dùng nến giá tiêu chuẩn", obsWait)
+            table.merge_cells(obsPanel, 0, 1 + obsRowShift, 1, 1 + obsRowShift)
+        else if na(obsTime)
+            f_obs_cell(0, 1, "Đang chờ đủ dữ liệu", obsWait)
+            table.merge_cells(obsPanel, 0, 1 + obsRowShift, 1, 1 + obsRowShift)
+        else
+            f_obs_sweep_row(1, "Quét đáy", obsLowSweep)
+            f_obs_sweep_row(2, "Quét đỉnh", obsHighSweep)
+            f_obs_direction_row(3, 1, obsLongMask, obsLowSweep)
+            f_obs_direction_row(4, -1, obsShortMask, obsHighSweep)
+        f_obs_cell(0, 5, (na(obsTime) ? "Chưa có nến chốt" : "Chốt " + str.format_time(obsTime, "HH:mm", "Asia/Ho_Chi_Minh") + " VN") + (committedFeatureBars < WARMUP_BARS ? " · Đang nạp nền" : " · Rê ô xem lý do"), obsMuted)
+        for mergedRow in array.from(0, 5)
+            table.merge_cells(obsPanel, 0, mergedRow + obsRowShift, 1, mergedRow + obsRowShift)
+        int paddingRow = obsRowShift == 1 ? 0 : 6
+        table.cell(obsPanel, 0, paddingRow, "", height = obsRowShift == 1 ? 8 : 5, bgcolor = color.new(color.black, 100))
+        table.merge_cells(obsPanel, 0, paddingRow, 1, paddingRow)
+
+bool obsStructureEvent = obsClosed and smcLatestStructure.time == time
+alertcondition(enableContextAlerts and obsClosed and obsVsa != 0 and obsVsa != 99, "Mẫu VSA đã đóng", "Mẫu VSA mới trên {{ticker}} {{interval}}; quan sát bối cảnh.")
+alertcondition(enableContextAlerts and obsClosed and obsSweep != 0, "Quét thanh khoản đã đóng", "Giá vượt và lấy lại một pool trên {{ticker}} {{interval}}.")
+alertcondition(enableContextAlerts and obsStructureEvent, "Thay đổi cấu trúc đã đóng", "BOS/CHoCH được xác nhận trên {{ticker}} {{interval}}.")
+plot(obsVsa, "Audit VSA code", display = display.data_window)
+plot(obsRv, "RV nến đã đóng", display = display.data_window)
+plot(obsRr, "Range ratio nến đã đóng", display = display.data_window)
+
+plot(obsLongMask, "Setup hồi lên: lý do chặn", display = display.data_window)
+plot(obsShortMask, "Setup hồi xuống: lý do chặn", display = display.data_window)
+
+plot(f_setup_phase(obsLongMask), "V2 phase long", display = display.data_window)
+plot(f_setup_phase(obsShortMask), "V2 phase short", display = display.data_window)
+plot(obsLongZoneCode, "V2 zone long", display = display.data_window)
+plot(obsShortZoneCode, "V2 zone short", display = display.data_window)
+plot(confLastCommittedEnd, "V2 HTF conf end", display = display.data_window)
+plot(anchorLastCommittedEnd, "V2 HTF anchor end", display = display.data_window)

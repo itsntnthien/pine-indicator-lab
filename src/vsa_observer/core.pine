@@ -1,0 +1,428 @@
+// Confirmed price engine; derivative of the user supplied XAU-VSA core.
+int DIR_BEARISH = -1
+int DIR_NEUTRAL = 0
+int DIR_BULLISH = 1
+int SE_CHOCH_BEARISH = -2
+int SE_BOS_BEARISH = -1
+int SE_NONE = 0
+int SE_BOS_BULLISH = 1
+int SE_CHOCH_BULLISH = 2
+// Max births per bar times the inclusive lifetime; never a display limit.
+int LIQUIDITY_CAPACITY = 1002
+int FVG_CAPACITY = 251
+int OB_CAPACITY = 251
+int SWING_LEFT_BARS = 5
+int SWING_RIGHT_BARS = 5
+int WARMUP_BARS = math.max(21, 3 * ema200Length)
+f_to_ticks(price, min_tick) =>
+    if na(price) or na(min_tick) or min_tick <= 0
+        int(na)
+    else
+        int(math.round(price / min_tick)) // Pine's round is half-away-from-zero
+f_ticks_to_price(ticks, min_tick) =>
+    if na(ticks) or na(min_tick)
+        float(na)
+    else
+        ticks * min_tick
+
+type Liquidity
+    int side
+    int creation_sequence_id
+    int creation_bar_index
+    int creation_time
+    int level_ticks
+    bool swept
+    bool terminal
+    int sweep_confirmation_bar
+    int sweep_anchor_ticks
+    int source_time = na
+    string end_reason = ""
+
+f_c08_price_text(ticks) =>
+    str.tostring(ticks * syminfo.mintick, format.mintick)
+type StructuralEvent
+    int event_type
+    int price_ticks
+    int time
+    float label_price = na
+type FVG
+    int side
+    int creation_sequence_id
+    int creation_bar_index
+    int creation_time
+    int top_ticks
+    int bottom_ticks
+    bool mitigated
+    bool filled
+    bool terminal
+    int source_time = na
+    int first_touch_bar = na
+    string end_reason = ""
+type OrderBlock
+    int side
+    int creation_sequence_id
+    int creation_bar_index
+    int creation_time
+    int top_ticks
+    int bottom_ticks
+    bool mitigated
+    bool terminal
+    int source_time = na
+    int first_touch_bar = na
+    string end_reason = ""
+
+// Fixed first-trial rules, not optimized. Missing/zero volume is neutral, never low volume.
+float vwVolumeMean = ta.sma(volume[1], 20)
+float vwRangeMean = ta.sma(high[1] - low[1], 20)
+float ema200 = ta.ema(close, ema200Length)
+float inspectorAtr = ta.atr(14)
+float vwValidVolumeWindow = ta.sma(not na(volume) and volume > 0 ? 1.0 : 0.0, 21)
+bool vwValid = vwValidVolumeWindow == 1 and not na(vwVolumeMean) and vwVolumeMean > 0 and not na(vwRangeMean) and vwRangeMean > 0 and high > low
+float vwRelativeVolume = vwValid ? volume / vwVolumeMean : na
+float vwRelativeRange = vwValid ? (high - low) / vwRangeMean : na
+float vwCloseLocation = vwValid ? (close - low) / (high - low) : na
+bool vwHighVolume = vwValid and vwRelativeVolume >= 1.5
+bool vwLowVolume = vwValid and vwRelativeVolume <= 0.7
+bool vwNarrow = vwValid and vwRelativeRange <= 0.8
+bool vwDemand = vwHighVolume and vwRelativeRange >= 1.2 and close > close[1] and vwCloseLocation >= 0.7
+bool vwSupply = vwHighVolume and vwRelativeRange >= 1.2 and close < close[1] and vwCloseLocation <= 0.3
+// ponytail: bar-pattern proxies, not proof of institutional absorption; validate on native feed.
+bool vwAbsorbBuy = vwHighVolume and vwNarrow and vwCloseLocation >= 0.65
+bool vwAbsorbSell = vwHighVolume and vwNarrow and vwCloseLocation <= 0.35
+bool vwNoSupply = vwLowVolume and vwNarrow and volume < volume[1] and volume < volume[2] and close < close[1] and vwCloseLocation >= 0.5
+bool vwNoDemand = vwLowVolume and vwNarrow and volume < volume[1] and volume < volume[2] and close > close[1] and vwCloseLocation <= 0.5
+int vwDirection = (vwDemand or vwAbsorbBuy or vwNoSupply ? 1 : 0) - (vwSupply or vwAbsorbSell or vwNoDemand ? 1 : 0)
+
+f_smc_inducement_value(int field, int trend, bool newLow, bool newHigh, int priorLowTicks, int priorHighTicks, int newLowTicks, int newHighTicks, int newLowTime, int newHighTime, int currentTicks, int currentTime, int currentSide) =>
+    bool bullInducement = trend == DIR_BULLISH and newLow and not na(priorLowTicks) and not na(newLowTicks) and newLowTicks > priorLowTicks
+    bool bearInducement = trend == DIR_BEARISH and newHigh and not na(priorHighTicks) and not na(newHighTicks) and newHighTicks < priorHighTicks
+    field == 0 ? bullInducement ? newLowTicks : bearInducement ? newHighTicks : currentTicks : field == 1 ? bullInducement ? newLowTime : bearInducement ? newHighTime : currentTime : bullInducement or bearInducement ? (bullInducement ? DIR_BULLISH : DIR_BEARISH) : currentSide
+f_observer_session(string timeframeText) =>
+    bool london = not na(time(timeframeText, "0800-1700:23456", "Europe/London"))
+    bool newYork = not na(time(timeframeText, "0800-1700:23456", "America/New_York"))
+    london and newYork ? "OVERLAP" : london ? "LONDON" : newYork ? "NEW YORK" : "OUTSIDE"
+bool showUpperCloud = showCloudContext
+
+bool supportedTf = chart.is_standard and timeframe.isminutes and (timeframe.multiplier == 1 or timeframe.multiplier == 3 or timeframe.multiplier == 5 or timeframe.multiplier == 15 or timeframe.multiplier == 30 or timeframe.multiplier == 60 or timeframe.multiplier == 240)
+// Unsupported standard intervals retain price observations, without setup confluence.
+bool smcObservationTf = chart.is_standard and (timeframe.isseconds or timeframe.isminutes or timeframe.isdaily or timeframe.isweekly or timeframe.ismonthly)
+bool smcCalculationTf = supportedTf or smcObservationTf
+bool smcObservationMode = not supportedTf and smcObservationTf
+int chartTfMinutes = supportedTf ? timeframe.multiplier : 0
+
+int confirmationTfMinutes = chartTfMinutes == 1 ? 5 : chartTfMinutes == 3 ? 15 : chartTfMinutes == 5 ? 15 : chartTfMinutes == 15 or chartTfMinutes == 30 ? 60 : chartTfMinutes == 60 ? 240 : chartTfMinutes == 240 ? 1440 : 0
+int anchorTfMinutes = chartTfMinutes == 1 ? 15 : chartTfMinutes == 3 ? 60 : chartTfMinutes == 5 ? 60 : chartTfMinutes == 15 or chartTfMinutes == 30 ? 240 : chartTfMinutes == 60 ? 1440 : chartTfMinutes == 240 ? 10080 : 0
+int chartTfMs = chartTfMinutes * 60000
+int confirmationTfMs = confirmationTfMinutes * 60000
+int anchorTfMs = anchorTfMinutes * 60000
+int confirmationExpectedBars = supportedTf ? int(confirmationTfMinutes / chartTfMinutes) : 0
+int anchorExpectedBars = supportedTf ? int(anchorTfMinutes / chartTfMinutes) : 0
+var float committedEmaFast = na
+var float committedEmaSlow = na
+var float committedAtr = na
+var float committedPreviousClose = na
+var int committedFeatureBars = 0
+float fastAlpha = 2.0 / 9.0
+float slowAlpha = 2.0 / 22.0
+float atrAlpha = 1.0 / 14.0
+float currentTrueRange = na(committedPreviousClose) ? high - low : math.max(high - low, math.max(math.abs(high - committedPreviousClose), math.abs(low - committedPreviousClose)))
+float shadowEmaFast = na(committedEmaFast) ? close : committedEmaFast + fastAlpha * (close - committedEmaFast)
+float shadowEmaSlow = na(committedEmaSlow) ? close : committedEmaSlow + slowAlpha * (close - committedEmaSlow)
+float shadowAtr = na(committedAtr) ? currentTrueRange : committedAtr + atrAlpha * (currentTrueRange - committedAtr)
+var int c16c02SwingHighTicks = na
+var int c16c02SwingHighSourceTime = na
+var int c16c02SwingHighConfirmationTime = na
+var int c16c02SwingLowTicks = na
+var int c16c02SwingLowSourceTime = na
+var int c16c02SwingLowConfirmationTime = na
+int SMC_LIQUIDITY_TOLERANCE_TICKS = 1
+int SMC_LIQUIDITY_MAX_AGE_BARS = 500
+int SMC_FVG_MIN_GAP_TICKS = 1
+int SMC_FVG_MAX_AGE_BARS = 250
+int SMC_OB_LOOKBACK_BARS = 20
+int SMC_OB_MAX_AGE_BARS = 250
+var int smcCanonicalBarIndex = 0
+// Capture sweeps before terminal pools are removed.
+var float smcSweptLowLevel = na
+var float smcSweptHighLevel = na
+var int smcCreationSequenceId = 0
+var int smcTrend = DIR_NEUTRAL
+var bool smcSwingHighConsumed = false
+var bool smcSwingLowConsumed = false
+var StructuralEvent smcLatestStructure = StructuralEvent.new(SE_NONE, na, na)
+var Liquidity[] smcLiquidity = array.new<Liquidity>(0)
+var FVG[] smcFvgs = array.new<FVG>(0)
+var OrderBlock[] smcObs = array.new<OrderBlock>(0)
+var int smcLatestInducementTicks = na
+var int smcLatestInducementTime = na
+var int smcLatestInducementSide = DIR_NEUTRAL
+
+var array<StructuralEvent> smcStructureHistory = array.new<StructuralEvent>()
+var int smcGapCount = 0
+// Current HTF is accepted only at/after its native close; the offset request supplies the prior confirmed bar during realtime.
+f_native_htf(string tf) =>
+    [co, ch, cl, cc, cv, ct, ce] = request.security(ticker.standard(syminfo.tickerid), tf, [open, high, low, close, volume, time, time_close], lookahead = barmerge.lookahead_off)
+    [po, ph, pl, pc, pv, pt, pe] = request.security(ticker.standard(syminfo.tickerid), tf, [open[1], high[1], low[1], close[1], volume[1], time[1], time_close[1]], lookahead = barmerge.lookahead_on)
+    bool useCurrent = not na(ce) and ce <= time_close and (na(pe) or ce >= pe)
+    [useCurrent ? co : po, useCurrent ? ch : ph, useCurrent ? cl : pl, useCurrent ? cc : pc, useCurrent ? cv : pv, useCurrent ? ct : pt, useCurrent ? ce : pe]
+string confTf = not supportedTf ? timeframe.period : confirmationTfMinutes == 1440 ? "D" : str.tostring(math.max(confirmationTfMinutes, timeframe.isminutes ? timeframe.multiplier : 1))
+string anchorTf = not supportedTf ? timeframe.period : anchorTfMinutes == 10080 ? "W" : anchorTfMinutes == 1440 ? "D" : str.tostring(math.max(anchorTfMinutes, timeframe.isminutes ? timeframe.multiplier : 1))
+[nConfO, nConfH, nConfL, nConfC, nConfV, nConfStart, nConfEnd] = f_native_htf(confTf)
+[nAnchorO, nAnchorH, nAnchorL, nAnchorC, nAnchorV, nAnchorStart, nAnchorEnd] = f_native_htf(anchorTf)
+var int confLastCommittedStart = na
+var int confLastCommittedEnd = na
+var float confCommittedO = na
+var float confCommittedH = na
+var float confCommittedL = na
+var float confCommittedC = na
+var float confCommittedV = na
+var bool confCommittedValid = false
+var int anchorLastCommittedStart = na
+var int anchorLastCommittedEnd = na
+var float anchorCommittedO = na
+var float anchorCommittedH = na
+var float anchorCommittedL = na
+var float anchorCommittedC = na
+var float anchorCommittedV = na
+var bool anchorCommittedValid = false
+bool confirmationBucketCommitted = false
+bool anchorBucketCommitted = false
+if barstate.isconfirmed
+    int smcPriorSwingHighTicks = c16c02SwingHighTicks
+    int smcPriorSwingLowTicks = c16c02SwingLowTicks
+    bool smcPriorSwingHighConsumed = smcSwingHighConsumed
+    bool smcPriorSwingLowConsumed = smcSwingLowConsumed
+    if smcCalculationTf
+        committedEmaFast := shadowEmaFast
+        committedEmaSlow := shadowEmaSlow
+        committedAtr := math.max(shadowAtr, 0.000000000001)
+        committedPreviousClose := close
+        committedFeatureBars += 1
+        if not na(high[SWING_LEFT_BARS + SWING_RIGHT_BARS])
+            int pivotHighTicks = f_to_ticks(high[SWING_RIGHT_BARS], syminfo.mintick)
+            int pivotLowTicks = f_to_ticks(low[SWING_RIGHT_BARS], syminfo.mintick)
+            bool pivotHighValid = not na(pivotHighTicks)
+            bool pivotLowValid = not na(pivotLowTicks)
+            for offset = 1 to SWING_LEFT_BARS
+                int leftHighTicks = f_to_ticks(high[SWING_RIGHT_BARS + offset], syminfo.mintick)
+                int leftLowTicks = f_to_ticks(low[SWING_RIGHT_BARS + offset], syminfo.mintick)
+                pivotHighValid := pivotHighValid and pivotHighTicks >= leftHighTicks
+                pivotLowValid := pivotLowValid and pivotLowTicks <= leftLowTicks
+            for offset = 0 to SWING_RIGHT_BARS - 1
+                int rightHighTicks = f_to_ticks(high[offset], syminfo.mintick)
+                int rightLowTicks = f_to_ticks(low[offset], syminfo.mintick)
+                pivotHighValid := pivotHighValid and pivotHighTicks > rightHighTicks
+                pivotLowValid := pivotLowValid and pivotLowTicks < rightLowTicks
+            if pivotHighValid
+                c16c02SwingHighTicks := pivotHighTicks
+                c16c02SwingHighSourceTime := time[SWING_RIGHT_BARS]
+                c16c02SwingHighConfirmationTime := time
+            if pivotLowValid
+                c16c02SwingLowTicks := pivotLowTicks
+                c16c02SwingLowSourceTime := time[SWING_RIGHT_BARS]
+                c16c02SwingLowConfirmationTime := time
+    if supportedTf
+        confCommittedValid := not na(nConfEnd) and nConfEnd <= time_close and not na(nConfO) and not na(nConfC)
+        anchorCommittedValid := not na(nAnchorEnd) and nAnchorEnd <= time_close and not na(nAnchorO) and not na(nAnchorC)
+        if confCommittedValid
+            confirmationBucketCommitted := na(confLastCommittedStart) or nConfStart != confLastCommittedStart
+            confLastCommittedStart := nConfStart
+            confLastCommittedEnd := nConfEnd
+            confCommittedO := nConfO
+            confCommittedH := nConfH
+            confCommittedL := nConfL
+            confCommittedC := nConfC
+            confCommittedV := nConfV
+        if anchorCommittedValid
+            anchorBucketCommitted := na(anchorLastCommittedStart) or nAnchorStart != anchorLastCommittedStart
+            anchorLastCommittedStart := nAnchorStart
+            anchorLastCommittedEnd := nAnchorEnd
+            anchorCommittedO := nAnchorO
+            anchorCommittedH := nAnchorH
+            anchorCommittedL := nAnchorL
+            anchorCommittedC := nAnchorC
+            anchorCommittedV := nAnchorV
+    if smcCalculationTf
+        smcCanonicalBarIndex += 1
+        smcSweptLowLevel := na
+        smcSweptHighLevel := na
+        int smcOpenTicks = f_to_ticks(open, syminfo.mintick)
+        int smcHighTicks = f_to_ticks(high, syminfo.mintick)
+        int smcLowTicks = f_to_ticks(low, syminfo.mintick)
+        int smcCloseTicks = f_to_ticks(close, syminfo.mintick)
+        if array.size(smcLiquidity) > 0
+            for index = array.size(smcLiquidity) - 1 to 0
+                Liquidity item = array.get(smcLiquidity, index)
+                if not item.terminal and f_obs_expired(smcCanonicalBarIndex - item.creation_bar_index, SMC_LIQUIDITY_MAX_AGE_BARS)
+                    item.terminal := true
+                    item.end_reason := "EXPIRED"
+                    array.set(smcLiquidity, index, item)
+                if item.terminal
+                    array.remove(smcLiquidity, index)
+        if array.size(smcFvgs) > 0
+            for index = array.size(smcFvgs) - 1 to 0
+                FVG item = array.get(smcFvgs, index)
+                if not item.terminal and f_obs_expired(smcCanonicalBarIndex - item.creation_bar_index, SMC_FVG_MAX_AGE_BARS)
+                    item.terminal := true
+                    item.end_reason := "EXPIRED"
+                    array.set(smcFvgs, index, item)
+                if item.terminal
+                    array.remove(smcFvgs, index)
+        if array.size(smcObs) > 0
+            for index = array.size(smcObs) - 1 to 0
+                OrderBlock item = array.get(smcObs, index)
+                if not item.terminal and f_obs_expired(smcCanonicalBarIndex - item.creation_bar_index, SMC_OB_MAX_AGE_BARS)
+                    item.terminal := true
+                    item.end_reason := "EXPIRED"
+                    array.set(smcObs, index, item)
+                if item.terminal
+                    array.remove(smcObs, index)
+        if array.size(smcLiquidity) > 0
+            for index = 0 to array.size(smcLiquidity) - 1
+                Liquidity item = array.get(smcLiquidity, index)
+                bool isHighPool = item.side == DIR_BEARISH
+                if (isHighPool and smcCloseTicks > item.level_ticks) or (not isHighPool and smcCloseTicks < item.level_ticks)
+                    item.terminal := true
+                    item.end_reason := "CLOSE_BREACH"
+                else if not item.swept and ((isHighPool and smcHighTicks > item.level_ticks and smcCloseTicks <= item.level_ticks) or (not isHighPool and smcLowTicks < item.level_ticks and smcCloseTicks >= item.level_ticks))
+                    item.swept := true
+                    item.sweep_confirmation_bar := smcCanonicalBarIndex
+                    item.sweep_anchor_ticks := item.level_ticks
+                    float sweptLevel = f_ticks_to_price(item.level_ticks, syminfo.mintick)
+                    if isHighPool
+                        smcSweptHighLevel := na(smcSweptHighLevel) ? sweptLevel : math.max(smcSweptHighLevel, sweptLevel)
+                    else
+                        smcSweptLowLevel := na(smcSweptLowLevel) ? sweptLevel : math.min(smcSweptLowLevel, sweptLevel)
+                array.set(smcLiquidity, index, item)
+        if array.size(smcFvgs) > 0
+            for index = 0 to array.size(smcFvgs) - 1
+                FVG item = array.get(smcFvgs, index)
+                if (item.side == DIR_BULLISH and smcCloseTicks < item.bottom_ticks) or (item.side == DIR_BEARISH and smcCloseTicks > item.top_ticks)
+                    item.terminal := true
+                    item.end_reason := "CLOSE_BREACH"
+                else if not item.filled and ((item.side == DIR_BULLISH and smcLowTicks <= item.bottom_ticks) or (item.side == DIR_BEARISH and smcHighTicks >= item.top_ticks))
+                    item.filled := true
+                    item.terminal := true
+                    item.end_reason := "FILLED"
+                else if not item.mitigated and smcHighTicks >= item.bottom_ticks and smcLowTicks <= item.top_ticks
+                    item.mitigated := true
+                    item.first_touch_bar := smcCanonicalBarIndex
+                array.set(smcFvgs, index, item)
+        if array.size(smcObs) > 0
+            for index = 0 to array.size(smcObs) - 1
+                OrderBlock item = array.get(smcObs, index)
+                if (item.side == DIR_BULLISH and smcCloseTicks < item.bottom_ticks) or (item.side == DIR_BEARISH and smcCloseTicks > item.top_ticks)
+                    item.terminal := true
+                    item.end_reason := "CLOSE_BREACH"
+                else if not item.mitigated and smcHighTicks >= item.bottom_ticks and smcLowTicks <= item.top_ticks
+                    item.mitigated := true
+                    item.first_touch_bar := smcCanonicalBarIndex
+                array.set(smcObs, index, item)
+        bool smcNewFvg = false
+        int smcNewFvgSide = DIR_NEUTRAL
+        bool continuousTriple = time == time_close[1] and time[1] == time_close[2]
+        if not na(high[2]) and not continuousTriple and (low > high[2] or high < low[2])
+            smcGapCount += 1
+        if not na(high[2]) and continuousTriple
+            int smcPrior2High = f_to_ticks(high[2], syminfo.mintick)
+            int smcPrior2Low = f_to_ticks(low[2], syminfo.mintick)
+            int smcPriorHigh = f_to_ticks(high[1], syminfo.mintick)
+            int smcPriorLow = f_to_ticks(low[1], syminfo.mintick)
+            if smcLowTicks > smcPrior2High and smcPriorHigh > smcPrior2High and smcLowTicks - smcPrior2High >= SMC_FVG_MIN_GAP_TICKS
+                smcCreationSequenceId += 1
+                array.push(smcFvgs, FVG.new(DIR_BULLISH, smcCreationSequenceId, smcCanonicalBarIndex, time, smcLowTicks, smcPrior2High, false, false, false, time[2]))
+                smcNewFvg := true
+                smcNewFvgSide := DIR_BULLISH
+            else if smcHighTicks < smcPrior2Low and smcPriorLow < smcPrior2Low and smcPrior2Low - smcHighTicks >= SMC_FVG_MIN_GAP_TICKS
+                smcCreationSequenceId += 1
+                array.push(smcFvgs, FVG.new(DIR_BEARISH, smcCreationSequenceId, smcCanonicalBarIndex, time, smcPrior2Low, smcHighTicks, false, false, false, time[2]))
+                smcNewFvg := true
+                smcNewFvgSide := DIR_BEARISH
+        bool smcNewLow = c16c02SwingLowConfirmationTime == time
+        bool smcNewHigh = c16c02SwingHighConfirmationTime == time
+        smcLatestInducementTicks := f_smc_inducement_value(0, smcTrend, smcNewLow, smcNewHigh, smcPriorSwingLowTicks, smcPriorSwingHighTicks, c16c02SwingLowTicks, c16c02SwingHighTicks, c16c02SwingLowSourceTime, c16c02SwingHighSourceTime, smcLatestInducementTicks, smcLatestInducementTime, smcLatestInducementSide)
+        smcLatestInducementTime := f_smc_inducement_value(1, smcTrend, smcNewLow, smcNewHigh, smcPriorSwingLowTicks, smcPriorSwingHighTicks, c16c02SwingLowTicks, c16c02SwingHighTicks, c16c02SwingLowSourceTime, c16c02SwingHighSourceTime, smcLatestInducementTicks, smcLatestInducementTime, smcLatestInducementSide)
+        smcLatestInducementSide := f_smc_inducement_value(2, smcTrend, smcNewLow, smcNewHigh, smcPriorSwingLowTicks, smcPriorSwingHighTicks, c16c02SwingLowTicks, c16c02SwingHighTicks, c16c02SwingLowSourceTime, c16c02SwingHighSourceTime, smcLatestInducementTicks, smcLatestInducementTime, smcLatestInducementSide)
+        if not na(smcLatestInducementTicks) and (smcLatestInducementSide == DIR_BULLISH ? smcLowTicks <= smcLatestInducementTicks : smcHighTicks >= smcLatestInducementTicks)
+            smcLatestInducementTicks := na
+            smcLatestInducementTime := na
+            smcLatestInducementSide := DIR_NEUTRAL
+        if smcNewLow or smcNewHigh
+            for sidePass = 0 to 1
+                int newSide = sidePass == 0 ? DIR_BULLISH : DIR_BEARISH
+                bool exists = newSide == DIR_BULLISH ? smcNewLow : smcNewHigh
+                int newLevel = newSide == DIR_BULLISH ? c16c02SwingLowTicks : c16c02SwingHighTicks
+                if exists
+                    bool merged = false
+                    if array.size(smcLiquidity) > 0
+                        for index = 0 to array.size(smcLiquidity) - 1
+                            Liquidity item = array.get(smcLiquidity, index)
+                            if not item.terminal and not item.swept and item.side == newSide and math.abs(newLevel - item.level_ticks) <= SMC_LIQUIDITY_TOLERANCE_TICKS and not merged
+                                item.level_ticks := newSide == DIR_BEARISH ? math.max(item.level_ticks, newLevel) : math.min(item.level_ticks, newLevel)
+                                array.set(smcLiquidity, index, item)
+                                merged := true
+                    if not merged
+                        smcCreationSequenceId += 1
+                        array.push(smcLiquidity, Liquidity.new(newSide, smcCreationSequenceId, smcCanonicalBarIndex, time, newLevel, false, false, -1, na, newSide == DIR_BULLISH ? c16c02SwingLowSourceTime : c16c02SwingHighSourceTime))
+        int smcEventType = SE_NONE
+        int smcBrokenLevel = na
+        bool smcBullBreak = not na(smcPriorSwingHighTicks) and not smcPriorSwingHighConsumed and smcCloseTicks > smcPriorSwingHighTicks
+        bool smcBearBreak = not na(smcPriorSwingLowTicks) and not smcPriorSwingLowConsumed and smcCloseTicks < smcPriorSwingLowTicks
+        if smcBullBreak and smcBearBreak
+            smcTrend := DIR_NEUTRAL
+        else
+            if smcBullBreak
+                smcEventType := smcTrend == DIR_BEARISH ? SE_CHOCH_BULLISH : SE_BOS_BULLISH
+                smcBrokenLevel := smcPriorSwingHighTicks
+                smcTrend := DIR_BULLISH
+                smcSwingHighConsumed := true
+            else if smcBearBreak
+                smcEventType := smcTrend == DIR_BULLISH ? SE_CHOCH_BEARISH : SE_BOS_BEARISH
+                smcBrokenLevel := smcPriorSwingLowTicks
+                smcTrend := DIR_BEARISH
+                smcSwingLowConsumed := true
+        if smcNewHigh
+            smcSwingHighConsumed := false
+        if smcNewLow
+            smcSwingLowConsumed := false
+        if smcEventType != SE_NONE
+            smcLatestStructure := StructuralEvent.new(smcEventType, smcBrokenLevel, time, f_ticks_to_price(smcBrokenLevel, syminfo.mintick) + (smcEventType > 0 ? -1 : 1) * nz(inspectorAtr) * 0.35)
+            array.push(smcStructureHistory, smcLatestStructure)
+            if array.size(smcStructureHistory) > 3
+                array.shift(smcStructureHistory)
+        if smcEventType != SE_NONE and smcNewFvg and ((smcEventType > 0 and smcNewFvgSide == DIR_BULLISH) or (smcEventType < 0 and smcNewFvgSide == DIR_BEARISH))
+            int smcObSide = smcEventType > 0 ? DIR_BULLISH : DIR_BEARISH
+            bool smcFoundOb = false
+            int smcObTop = na
+            int smcObBottom = na
+            int smcObSourceTime = na
+            for offset = 1 to SMC_OB_LOOKBACK_BARS
+                if not na(open[offset]) and not smcFoundOb
+                    int sourceOpen = f_to_ticks(open[offset], syminfo.mintick)
+                    int sourceClose = f_to_ticks(close[offset], syminfo.mintick)
+                    if (smcObSide == DIR_BULLISH and sourceClose < sourceOpen) or (smcObSide == DIR_BEARISH and sourceClose > sourceOpen)
+                        smcObTop := f_to_ticks(high[offset], syminfo.mintick)
+                        smcObBottom := f_to_ticks(low[offset], syminfo.mintick)
+                        smcObSourceTime := time[offset]
+                        smcFoundOb := true
+            if smcFoundOb
+                smcCreationSequenceId += 1
+                array.push(smcObs, OrderBlock.new(smcObSide, smcCreationSequenceId, smcCanonicalBarIndex, time, smcObTop, smcObBottom, false, false, smcObSourceTime))
+        if array.size(smcLiquidity) > 0
+            for index = array.size(smcLiquidity) - 1 to 0
+                if array.get(smcLiquidity, index).terminal
+                    array.remove(smcLiquidity, index)
+            if array.size(smcLiquidity) > LIQUIDITY_CAPACITY
+                runtime.error("V3 invariant: smcLiquidity exceeded lifetime bound")
+        if array.size(smcFvgs) > 0
+            for index = array.size(smcFvgs) - 1 to 0
+                if array.get(smcFvgs, index).terminal
+                    array.remove(smcFvgs, index)
+            if array.size(smcFvgs) > FVG_CAPACITY
+                runtime.error("V3 invariant: smcFvgs exceeded lifetime bound")
+        if array.size(smcObs) > 0
+            for index = array.size(smcObs) - 1 to 0
+                if array.get(smcObs, index).terminal
+                    array.remove(smcObs, index)
+            if array.size(smcObs) > OB_CAPACITY
+                runtime.error("V3 invariant: smcObs exceeded lifetime bound")
